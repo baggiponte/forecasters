@@ -2,8 +2,9 @@
 
 The server owns only the browser transport required by ``examples/lineup/static``:
 the model catalog and load status, a serialized CPU inference call, and a WebSocket
-that coalesces superseded drawing requests. The forecast payload is the explicit
-median vector; quantiles, bands and scoring are not part of this demo.
+that coalesces superseded drawing requests. Forecasts carry the explicit median vector
+by default, or a central native prediction interval as well when the client asks for one.
+Scoring and sample-based forecasts are not part of this demo.
 """
 
 from __future__ import annotations
@@ -17,7 +18,7 @@ import time
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable, Iterable, Sequence
+from typing import Any, Callable, Iterable, Sequence, TypedDict
 
 import numpy as np
 from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
@@ -37,6 +38,16 @@ MAX_CONTEXT_VALUES = 2_048
 MAX_HORIZON = 1_024
 MAX_MODELS_PER_REQUEST = 8
 MAX_WEBSOCKET_TEXT = MAX_BODY_BYTES
+INTERVAL_LEVELS: tuple[float, float, float] = (0.1, 0.5, 0.9)
+NATIVE_LEVEL_ABS_TOL = 1e-7
+
+
+class IntervalPayload(TypedDict):
+    """Native lower/upper quantiles for the demo's central 80% interval."""
+
+    levels: list[float]
+    lower: list[float]
+    upper: list[float]
 
 
 class RequestError(ValueError):
@@ -222,7 +233,14 @@ class ModelManager:
             await task
         return runtime
 
-    async def predict(self, key: str, context: np.ndarray, horizon: int) -> tuple[list[float], float]:
+    async def predict(
+        self,
+        key: str,
+        context: np.ndarray,
+        horizon: int,
+        *,
+        include_interval: bool = False,
+    ) -> tuple[list[float], IntervalPayload | None, float]:
         runtime = self._models.get(key)
         if runtime is None:
             raise ModelUnavailable(f"unknown model {key!r}")
@@ -241,12 +259,18 @@ class ModelManager:
             # native thread cannot be stopped. Keep the inference lock until that thread
             # has actually finished so a second request cannot overlap native compute.
             native = asyncio.create_task(
-                asyncio.to_thread(_predict_median, runtime.adapter, context, horizon)
+                asyncio.to_thread(
+                    _predict,
+                    runtime.adapter,
+                    context,
+                    horizon,
+                    include_interval,
+                )
             )
             cancelled = False
             while True:
                 try:
-                    median = await asyncio.shield(native)
+                    median, interval = await asyncio.shield(native)
                     break
                 except asyncio.CancelledError:
                     cancelled = True
@@ -258,7 +282,7 @@ class ModelManager:
             if cancelled:
                 raise asyncio.CancelledError
         elapsed = (time.perf_counter() - started) * 1000.0
-        return median, elapsed
+        return median, interval, elapsed
 
     async def shutdown(self) -> None:
         tasks = [runtime.task for runtime in self._models.values() if runtime.task]
@@ -274,7 +298,49 @@ class ModelManager:
                 pass
 
 
-def _predict_median(adapter: Forecaster, context: np.ndarray, horizon: int) -> list[float]:
+def _has_native_level(level: float, supported: tuple[float, ...]) -> bool:
+    return any(
+        math.isclose(level, native, rel_tol=0.0, abs_tol=NATIVE_LEVEL_ABS_TOL)
+        for native in supported
+    )
+
+
+def _predict(
+    adapter: Forecaster,
+    context: np.ndarray,
+    horizon: int,
+    include_interval: bool,
+) -> tuple[list[float], IntervalPayload | None]:
+    if include_interval:
+        supported = adapter.supported_quantile_levels
+        missing = [level for level in INTERVAL_LEVELS if not _has_native_level(level, supported)]
+        if missing:
+            raise RuntimeError(
+                "the loaded checkpoint cannot provide the central 80% prediction interval; "
+                f"missing native quantile levels {missing!r}; supported levels are {supported!r}"
+            )
+        values = adapter.predict(
+            context,
+            horizon=horizon,
+            quantile_levels=list(INTERVAL_LEVELS),
+        )
+        array = np.asarray(values)
+        expected_shape = (horizon, len(INTERVAL_LEVELS))
+        if array.shape != expected_shape:
+            raise RuntimeError(
+                f"adapter returned interval shape {array.shape}; expected {expected_shape}"
+            )
+        if not np.issubdtype(array.dtype, np.floating):
+            raise RuntimeError(f"adapter returned non-floating interval dtype {array.dtype}")
+        if not np.isfinite(array).all():
+            raise RuntimeError("adapter returned a non-finite interval value")
+        interval: IntervalPayload = {
+            "levels": list(INTERVAL_LEVELS),
+            "lower": [float(value) for value in array[:, 0]],
+            "upper": [float(value) for value in array[:, 2]],
+        }
+        return [float(value) for value in array[:, 1]], interval
+
     values = adapter.predict(context, horizon=horizon)
     array = np.asarray(values)
     if array.shape != (horizon,):
@@ -283,7 +349,7 @@ def _predict_median(adapter: Forecaster, context: np.ndarray, horizon: int) -> l
         raise RuntimeError(f"adapter returned non-floating median dtype {array.dtype}")
     if not np.isfinite(array).all():
         raise RuntimeError("adapter returned a non-finite median value")
-    return [float(value) for value in array]
+    return [float(value) for value in array], None
 
 
 def _parse_context(values: object) -> np.ndarray:
@@ -335,13 +401,22 @@ def _parse_models(value: object, manager: ModelManager) -> list[str]:
     return selected
 
 
-def parse_forecast_request(payload: object, manager: ModelManager) -> tuple[np.ndarray, int, list[str]]:
+def _parse_include_interval(value: object) -> bool:
+    if not isinstance(value, bool):
+        raise RequestError("include_interval must be a boolean")
+    return value
+
+
+def parse_forecast_request(
+    payload: object, manager: ModelManager
+) -> tuple[np.ndarray, int, list[str], bool]:
     if not isinstance(payload, dict):
         raise RequestError("request body must be a JSON object")
     context = _parse_context(payload.get("y"))
     horizon = _parse_horizon(payload.get("h"))
     models = _parse_models(payload.get("models"), manager)
-    return context, horizon, models
+    include_interval = _parse_include_interval(payload.get("include_interval", False))
+    return context, horizon, models, include_interval
 
 
 def _error_text(exc: BaseException) -> str:
@@ -351,11 +426,23 @@ def _error_text(exc: BaseException) -> str:
 
 
 async def _forecast_one(
-    manager: ModelManager, key: str, context: np.ndarray, horizon: int
+    manager: ModelManager,
+    key: str,
+    context: np.ndarray,
+    horizon: int,
+    include_interval: bool,
 ) -> dict[str, Any]:
     try:
-        median, elapsed_ms = await manager.predict(key, context, horizon)
-        return {"median": median, "ms": elapsed_ms}
+        median, interval, elapsed_ms = await manager.predict(
+            key,
+            context,
+            horizon,
+            include_interval=include_interval,
+        )
+        result: dict[str, Any] = {"median": median, "ms": elapsed_ms}
+        if interval is not None:
+            result["interval"] = interval
+        return result
     except Exception as exc:
         LOGGER.info("Forecast for %s failed: %s", key, exc)
         return {"error": _error_text(exc)}
@@ -432,19 +519,21 @@ def create_app(
         except (json.JSONDecodeError, UnicodeDecodeError) as exc:
             raise HTTPException(status_code=400, detail=f"invalid JSON: {exc}") from exc
         try:
-            context, horizon, keys = parse_forecast_request(payload, manager)
+            context, horizon, keys, include_interval = parse_forecast_request(payload, manager)
         except RequestError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
         results: dict[str, Any] = {}
         for key in keys:
-            results[key] = await _forecast_one(manager, key, context, horizon)
+            results[key] = await _forecast_one(
+                manager, key, context, horizon, include_interval
+            )
         return {"results": results}
 
     @app.websocket("/ws")
     async def websocket(ws: WebSocket) -> None:
         await ws.accept()
-        pending: tuple[int, np.ndarray, int, list[str]] | None = None
+        pending: tuple[int, np.ndarray, int, list[str], bool] | None = None
         wake = asyncio.Event()
 
         async def worker() -> None:
@@ -456,12 +545,14 @@ def create_app(
                 pending = None
                 if request is None:
                     continue
-                seq, context, horizon, keys = request
+                seq, context, horizon, keys, include_interval = request
                 for key in keys:
                     # A newer drawing supersedes the rest of an in-flight request.
                     if wake.is_set():
                         break
-                    result = await _forecast_one(manager, key, context, horizon)
+                    result = await _forecast_one(
+                        manager, key, context, horizon, include_interval
+                    )
                     message = {"type": "forecast", "key": key, "seq": seq, **result}
                     if "error" in result:
                         message["type"] = "error"
@@ -491,7 +582,9 @@ def create_app(
                     await ws.send_json({"type": "error", "seq": seq, "error": "expected a forecast message"})
                     continue
                 try:
-                    context, horizon, keys = parse_forecast_request(payload, manager)
+                    context, horizon, keys, include_interval = parse_forecast_request(
+                        payload, manager
+                    )
                 except RequestError as exc:
                     await ws.send_json({"type": "error", "seq": seq, "error": str(exc)})
                     continue
@@ -499,7 +592,7 @@ def create_app(
                     await ws.send_json({"type": "error", "error": "seq must be a positive integer"})
                     continue
 
-                pending = (seq, context, horizon, keys)
+                pending = (seq, context, horizon, keys, include_interval)
                 wake.set()
         except WebSocketDisconnect:
             pass

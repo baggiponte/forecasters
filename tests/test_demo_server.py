@@ -1,7 +1,8 @@
 """FastAPI demo transport tests using fake adapters.
 
 These tests do not load a native checkpoint. They cover the HTTP/WebSocket contract,
-lazy loading, retry, per-model isolation, median transport and request coalescing.
+lazy loading, retry, per-model isolation, median and interval transport, and request
+coalescing.
 """
 
 from __future__ import annotations
@@ -25,11 +26,13 @@ from examples.lineup.server import ModelManager, ModelSpec, create_app
 class FakeAdapter:
     max_horizon: int = 8
     max_context_length: int = 64
+    supported: tuple[float, ...] = (0.1, 0.5, 0.9)
     calls: list[tuple[np.ndarray, int]] = field(default_factory=list)
+    quantile_requests: list[tuple[float, ...] | None] = field(default_factory=list)
 
     @property
     def supported_quantile_levels(self) -> tuple[float, ...]:
-        return (0.1, 0.5, 0.9)
+        return self.supported
 
     def predict(
         self,
@@ -38,10 +41,25 @@ class FakeAdapter:
         horizon: int,
         quantile_levels: Any = None,
     ) -> np.ndarray:
-        assert quantile_levels is None
         values = np.asarray(context, dtype=np.float64)
         self.calls.append((values.copy(), horizon))
-        return values[-1] + np.arange(horizon, dtype=np.float64) * 0.01
+        requested = None if quantile_levels is None else tuple(quantile_levels)
+        self.quantile_requests.append(requested)
+        median = values[-1] + np.arange(horizon, dtype=np.float64) * 0.01
+        if requested is None:
+            return median
+        spread = np.arange(1, horizon + 1, dtype=np.float64)
+        columns = []
+        for level in requested:
+            if level == 0.1:
+                columns.append(median - spread * 0.01)
+            elif level == 0.5:
+                columns.append(median)
+            elif level == 0.9:
+                columns.append(median + spread * 0.02)
+            else:
+                raise AssertionError(f"unexpected quantile level {level!r}")
+        return np.column_stack(columns)
 
 
 class Factory:
@@ -123,6 +141,85 @@ def test_lazy_load_reuses_adapter_for_http_forecasts() -> None:
         np.testing.assert_array_equal(adapter.calls[0][0], np.asarray(context))
 
 
+def test_http_and_websocket_interval_parity_and_median_only_off() -> None:
+    factory = Factory()
+    app = create_app(specs=[spec("fake", factory)], autoload=False)
+    context = [0.1, 0.23456789]
+    horizon = 4
+
+    with TestClient(app) as client:
+        load_and_wait(client, "fake")
+        assert factory.adapter.quantile_requests == []
+
+        response = client.post(
+            "/api/forecast",
+            json={
+                "y": context,
+                "h": horizon,
+                "models": ["fake"],
+                "include_interval": True,
+            },
+        )
+        assert response.status_code == 200
+        result = response.json()["results"]["fake"]
+        median = np.asarray(result["median"])
+        expected_median = context[-1] + np.arange(horizon) * 0.01
+        spread = np.arange(1, horizon + 1)
+        np.testing.assert_array_equal(median, expected_median)
+        assert result["interval"]["levels"] == [0.1, 0.5, 0.9]
+        np.testing.assert_array_equal(
+            np.asarray(result["interval"]["lower"]), expected_median - spread * 0.01
+        )
+        np.testing.assert_array_equal(
+            np.asarray(result["interval"]["upper"]), expected_median + spread * 0.02
+        )
+        assert factory.adapter.quantile_requests == [(0.1, 0.5, 0.9)]
+
+        with client.websocket_connect("/ws") as ws:
+            ws.send_json(
+                {
+                    "type": "forecast",
+                    "seq": 4,
+                    "y": context,
+                    "h": horizon,
+                    "models": ["fake"],
+                    "include_interval": True,
+                }
+            )
+            message = ws.receive_json()
+            assert message["type"] == "forecast"
+            np.testing.assert_array_equal(np.asarray(message["median"]), median)
+            assert message["interval"] == result["interval"]
+        assert factory.adapter.quantile_requests == [(0.1, 0.5, 0.9)] * 2
+
+        without_band = client.post(
+            "/api/forecast",
+            json={"y": context, "h": horizon, "models": ["fake"]},
+        ).json()["results"]["fake"]
+        assert "interval" not in without_band
+        assert len(without_band["median"]) == horizon
+        assert factory.adapter.quantile_requests[-1] is None
+
+
+def test_interval_unsupported_by_loaded_grid_is_a_visible_error() -> None:
+    factory = Factory(FakeAdapter(supported=(0.5, 0.9)))
+    app = create_app(specs=[spec("fake", factory)], autoload=False)
+    with TestClient(app) as client:
+        load_and_wait(client, "fake")
+        result = client.post(
+            "/api/forecast",
+            json={
+                "y": [0.1],
+                "h": 2,
+                "models": ["fake"],
+                "include_interval": True,
+            },
+        ).json()["results"]["fake"]
+        assert "80% prediction interval" in result["error"]
+        assert "0.1" in result["error"]
+        assert factory.adapter.quantile_requests == []
+
+
 def test_one_load_failure_is_isolated_and_retry_succeeds() -> None:
     bad_factory = Factory(failures=1)
     good_factory = Factory()
@@ -197,6 +294,9 @@ def test_native_horizon_limit_is_reported_not_clipped() -> None:
         {"y": [0.1], "h": 1, "models": "fake"},
         {"y": [0.1], "h": 1, "models": ["unknown"]},
         {"y": [0.1], "h": 1, "models": ["fake", "fake"]},
+        {"y": [0.1], "h": 1, "models": ["fake"], "include_interval": None},
+        {"y": [0.1], "h": 1, "models": ["fake"], "include_interval": 1},
+        {"y": [0.1], "h": 1, "models": ["fake"], "include_interval": "yes"},
         {"y": [0.1] * 2_049, "h": 1, "models": ["fake"]},
         {"y": [10**1_000], "h": 1, "models": ["fake"]},
     ],
@@ -276,6 +376,9 @@ class BlockingAdapter(FakeAdapter):
         quantile_levels: Any = None,
     ) -> np.ndarray:
         self.calls.append((np.asarray(context, dtype=np.float64).copy(), horizon))
+        self.quantile_requests.append(
+            None if quantile_levels is None else tuple(quantile_levels)
+        )
         if len(self.calls) == 1:
             self.started.set()
             assert self.release.wait(timeout=5)
@@ -327,8 +430,9 @@ def test_cancelled_caller_keeps_native_inference_serialized() -> None:
             adapter.release.set()
         with pytest.raises(asyncio.CancelledError):
             await first
-        result, _ = await second
+        median, interval, _ = await second
+        assert interval is None
         assert len(adapter.calls) == 2
-        np.testing.assert_array_equal(np.asarray(result), np.arange(2, dtype=np.float64))
+        np.testing.assert_array_equal(np.asarray(median), np.arange(2, dtype=np.float64))
 
     asyncio.run(scenario())

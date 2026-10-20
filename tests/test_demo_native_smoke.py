@@ -68,7 +68,12 @@ def test_real_checkpoints_over_http_and_websocket_reuse_loaded_adapters() -> Non
 
         http_response = client.post(
             "/api/forecast",
-            json={"y": context, "h": horizon, "models": keys},
+            json={
+                "y": context,
+                "h": horizon,
+                "models": keys,
+                "include_interval": True,
+            },
         )
         assert http_response.status_code == 200
         http_results = http_response.json()["results"]
@@ -78,10 +83,22 @@ def test_real_checkpoints_over_http_and_websocket_reuse_loaded_adapters() -> Non
             result = http_results[key]
             assert "error" not in result, result
             median = np.asarray(result["median"], dtype=np.float64)
+            interval = result["interval"]
             adapter = manager.get(key).adapter
             assert adapter is not None
-            expected = adapter.predict(np.asarray(context, dtype=np.float64), horizon=horizon)
-            np.testing.assert_array_equal(median, expected)
+            expected = adapter.predict(
+                np.asarray(context, dtype=np.float64),
+                horizon=horizon,
+                quantile_levels=[0.1, 0.5, 0.9],
+            )
+            np.testing.assert_array_equal(median, expected[:, 1])
+            assert interval["levels"] == [0.1, 0.5, 0.9]
+            np.testing.assert_array_equal(
+                np.asarray(interval["lower"], dtype=np.float64), expected[:, 0]
+            )
+            np.testing.assert_array_equal(
+                np.asarray(interval["upper"], dtype=np.float64), expected[:, 2]
+            )
 
         with client.websocket_connect("/ws") as ws:
             ws.send_json(
@@ -91,13 +108,24 @@ def test_real_checkpoints_over_http_and_websocket_reuse_loaded_adapters() -> Non
                     "y": context,
                     "h": horizon,
                     "models": keys,
+                    "include_interval": True,
                 }
             )
             messages = [ws.receive_json(), ws.receive_json()]
             assert {message["key"] for message in messages} == set(keys)
             for message in messages:
                 assert message["type"] == "forecast"
-                median = np.asarray(message["median"], dtype=np.float64)
+                http_result = http_results[message["key"]]
                 np.testing.assert_array_equal(
-                    median, np.asarray(http_results[message["key"]]["median"])
+                    np.asarray(message["median"], dtype=np.float64),
+                    np.asarray(http_result["median"]),
+                )
+                assert message["interval"]["levels"] == http_result["interval"]["levels"]
+                np.testing.assert_array_equal(
+                    np.asarray(message["interval"]["lower"], dtype=np.float64),
+                    np.asarray(http_result["interval"]["lower"]),
+                )
+                np.testing.assert_array_equal(
+                    np.asarray(message["interval"]["upper"], dtype=np.float64),
+                    np.asarray(http_result["interval"]["upper"]),
                 )
