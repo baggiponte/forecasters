@@ -6,8 +6,9 @@ A minimal Python interface over native SDKs for pretrained time-series foundatio
 The package exposes two concrete adapters, `ChronosBolt` and `Timestral`, plus one small
 structural `Forecaster` protocol. A small FastAPI example under `examples/lineup` serves the
 existing Line-up canvas with the explicit median vector and an optional central 80% native
-prediction interval. There is still no deployment platform, CLI, training support, sample
-generation or model registry.
+prediction interval. The same shared canvas also runs inside a local marimo notebook through
+a purpose-built AnyWidget, without a FastAPI process or forecast HTTP request. There is still
+no deployment platform, CLI, training support, sample generation or model registry.
 
 ## Implemented API
 
@@ -103,12 +104,37 @@ rollout. The demo server is a single local process without authentication or a s
 
 The [earlier external reviews](design/opencode-review.md), [second review](design/opencode-review-2.md) and [third review](design/opencode-review-3.md) assess the previous contract. The earlier [`CONTRACT.md`](CONTRACT.md) proposed a larger worker-based framework and remains historical, not binding.
 
+## Line-up local marimo notebook
+
+The primary local notebook is [`examples/lineup/notebook.py`](examples/lineup/notebook.py).
+It loads both existing native adapters once in the kernel, then displays the same shared
+Line-up renderer through `mo.ui.anywidget(LineupWidget(...))`. Requests and results use public
+AnyWidget custom messages, not an external server, iframe bridge or downstream marimo cell
+write-back loop. Forecasts still run synchronously on the tiny CPU models in the kernel.
+
+From the repository root, with the optional notebook dependencies installed:
+
+```bash
+FORECASTERS_DEMO_CACHE="$PWD/.hf-cache" FORECASTERS_DEMO_LOCAL_ONLY=1 \
+  .venv/bin/marimo edit examples/lineup/notebook.py --no-token --port 2718
+```
+
+Open <http://127.0.0.1:2718/>. The project environment is used; the notebook intentionally has
+no PEP 723 block. When `FORECASTERS_DEMO_CACHE` is unset, the cached `.hf-cache` directory is
+used if present, otherwise the native SDKs use the standard Hugging Face cache. The notebook
+supports the same manual drawing, presets, overlay/lanes, model toggles, 80% bands, counts and
+copy/download behavior as the standalone canvas. Pointer movement repaints only; inference is
+requested on pointer-up, presets, model toggles and band changes. No FastAPI, port 8010 or
+network forecast endpoint is required.
+
 ## Line-up example server
 
 ![Line-up reference app](docs/overlay.png)
 
-The canvas in [`examples/lineup/static`](examples/lineup/static) is now served by a small local
-FastAPI app in [`examples/lineup/server.py`](examples/lineup/server.py). It keeps the existing
+The canvas in [`examples/lineup/static`](examples/lineup/static) is also served by a small local
+FastAPI app in [`examples/lineup/server.py`](examples/lineup/server.py). The shared
+`static/lineup.js` renderer is used by both this page and the notebook widget; the FastAPI page
+remains the secondary browser consumer. It keeps the existing
 layout, manual pointer drawing, presets, model toggles and overlay/lanes views. The default
 UI shows the median; a **Bands 80%** toggle optionally adds each model's central native
 prediction interval. Forecast-value smoothing and quantile/pinball scoring remain out of the

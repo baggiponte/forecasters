@@ -616,3 +616,43 @@ The local demo was restarted on the existing URL <http://127.0.0.1:8010/> with
   calls it a prediction interval but does not estimate empirical coverage.
 - The band is central 80% only; there is no arbitrary percentile control, interpolation,
   median substitution or sample-based interval option.
+
+## Local marimo AnyWidget Line-up
+
+The Line-up renderer now lives in one shared plain-JS module,
+`examples/lineup/static/lineup.js`. The standalone FastAPI page and the local
+marimo notebook both mount it through `mountLineup(root, host)`. The notebook
+uses `mo.ui.anywidget(LineupWidget(...))`; the widget owns native adapters
+privately, sends public AnyWidget custom messages for requests and replies, and
+keeps a JSON-safe result snapshot for Python inspection. It does not call
+FastAPI, port 8010, or any forecast HTTP endpoint, and no downstream marimo cell
+writes back into the widget.
+
+The shared Python catalog and native prediction/request validation moved to
+`examples/lineup/engine.py` without FastAPI imports. The server keeps only its
+web status, scheduling and transport responsibilities. The notebook loads both
+cached checkpoints once in the kernel and passes the adapters to the widget.
+
+Final acceptance evidence from the root review and local live check:
+
+```text
+Full native test run: 165 passed, 2 skipped
+mypy: no issues found
+marimo check examples/lineup/notebook.py: passed
+node --check for shared renderer, standalone host and AFM entry: passed
+```
+
+The user manually confirmed a 63-point hand-drawn context producing two native
+64-point forecasts in the live notebook. Root browser automation confirmed the
+same live notebook preset path, both native band bounds at levels 0.1/0.5/0.9,
+390 px and 320 px root-width layouts without hint overflow, same-model two-view
+request-id isolation, and cleanup of completed/cancelled custom listeners. The
+standalone browser check still draws, forecasts, toggles bands/models, copies a
+PNG with legend and switches to its narrow layout.
+
+Live notebook: <http://127.0.0.1:2718/> (marimo process PID 38270). Existing
+standalone demo remains available at <http://127.0.0.1:8010/> (PID 34010).
+
+Limitations: inference remains synchronous in the notebook kernel; the widget
+supports the same central native 80% interval only; there is no notebook cloud
+deployment, model-loading progress UI, scheduler or worker framework.
