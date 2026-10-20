@@ -26,6 +26,8 @@ const countEl = document.getElementById("count");
 const subEl = document.getElementById("sub");
 const railFoot = document.getElementById("railFoot");
 const countsEl = document.getElementById("counts");
+const bandsBtn = document.getElementById("bands");
+const bandNote = document.getElementById("bandNote");
 const copyBtn = document.getElementById("copy");
 const legendPanel = document.getElementById("legendPanel");
 
@@ -38,8 +40,9 @@ const COPY_TITLE = "Copy the graph and model legend as a PNG image";
 
 const S = {
   view: "overlay",       // overlay | lanes
+  bands: false,          // request and show each model's central 80% interval
   stroke: null,
-  fc: {},                // key -> { median, from, t0, at, ms, seq }
+  fc: {},                // key -> { median, interval, from, t0, at, ms, seq }
   lastSeq: {},           // per model, the newest answer applied
   errors: {},            // per model, newest forecast/load error text
   off: new Set(),         // models the user switched off (or has not loaded)
@@ -398,6 +401,30 @@ function visibleModels() {
   return models.filter((m) => m.status === "ready" && !S.off.has(m.key));
 }
 
+function updateBandChrome() {
+  bandsBtn.setAttribute("aria-pressed", String(S.bands));
+  bandNote.classList.toggle("hidden", !S.bands);
+}
+
+function removeIntervals() {
+  for (const fc of [S.fc, example && example.fc]) {
+    if (!fc) continue;
+    for (const forecast of Object.values(fc)) delete forecast.interval;
+  }
+}
+
+function setBands(enabled) {
+  if (S.bands === enabled) return;
+  S.bands = enabled;
+  S.generation += 1;  // an old median-only or banded reply must not land after this switch
+  if (!enabled) removeIntervals();
+  updateBandChrome();
+  if (S.stroke) requestForecast(true);
+  else if (!touched) scheduleExample();
+  updateMsLabels();
+  invalidate();
+}
+
 function nativeHorizonCap() {
   const caps = visibleModels()
     .map((m) => m.max_horizon)
@@ -472,12 +499,36 @@ function handleMessage(m) {
   if (!sent) return;
   if (m.seq < (S.lastSeq[m.key] || 0)) return;
   if (!Array.isArray(m.median) || !m.median.every((v) => Number.isFinite(v))) return;
+  const interval = intervalFrom(m, m.median.length);
+  if (S.bands && !interval) {
+    S.lastSeq[m.key] = m.seq;
+    S.errors[m.key] = "Invalid 80% interval response.";
+    delete S.fc[m.key];
+    setStatus(`${modelOf(m.key)?.name || m.key}: invalid 80% interval response.`);
+    updateMsLabels();
+    invalidate();
+    return;
+  }
   S.lastSeq[m.key] = m.seq;
   delete S.errors[m.key];
-  applyForecast(m.key, m, sent.t0);
+  applyForecast(m.key, m, sent.t0, S.bands ? interval : null);
 }
 
-function applyForecast(key, msg, t0) {
+function intervalFrom(msg, length) {
+  const interval = msg.interval;
+  if (!interval || !Array.isArray(interval.levels) || interval.levels.length !== 3) return null;
+  if (!interval.levels.every((v) => Number.isFinite(v))) return null;
+  if (!Array.isArray(interval.lower) || interval.lower.length !== length) return null;
+  if (!Array.isArray(interval.upper) || interval.upper.length !== length) return null;
+  if (![...interval.lower, ...interval.upper].every((v) => Number.isFinite(v))) return null;
+  return {
+    levels: interval.levels.slice(),
+    lower: interval.lower.slice(),
+    upper: interval.upper.slice(),
+  };
+}
+
+function applyForecast(key, msg, t0, interval) {
   const median = msg.median.slice();
   const prev = S.fc[key];
   let from = median;
@@ -488,7 +539,9 @@ function applyForecast(key, msg, t0) {
       return j >= 0 && j < prev.median.length ? prev.median[j] : v;
     });
   }
-  S.fc[key] = { median, from, t0, at: performance.now(), ms: msg.ms, seq: msg.seq };
+  S.fc[key] = {
+    median, interval, from, t0, at: performance.now(), ms: msg.ms, seq: msg.seq,
+  };
   updateMsLabels();
   updateBestStatus();
   invalidate();
@@ -539,6 +592,7 @@ function requestForecast(final = false) {
     y: s.ys.slice(-MAX_CONTEXT),
     h,
     models: keys,
+    include_interval: S.bands,
   }));
   return seq;
 }
@@ -580,7 +634,7 @@ async function showExample() {
     const res = await fetch("/api/forecast", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ y: stroke.ys, h, models: ready }),
+      body: JSON.stringify({ y: stroke.ys, h, models: ready, include_interval: S.bands }),
     });
     if (example !== target || touched) return;
     if (!res.ok) {
@@ -605,8 +659,15 @@ async function showExample() {
         delete target.fc[key];
         continue;
       }
+      const interval = intervalFrom(msg, msg.median.length);
+      if (S.bands && !interval) {
+        target.errors[key] = "Invalid 80% interval response.";
+        delete target.fc[key];
+        continue;
+      }
       target.fc[key] = {
         median: msg.median.slice(),
+        interval: S.bands ? interval : null,
         from: msg.median.slice(),
         t0: target.t0,
         at: performance.now(),
@@ -668,6 +729,20 @@ function blend(f, i, now) {
   return f.from[i] + (f.median[i] - f.from[i]) * ease(t);
 }
 
+function drawBand(stroke, f, color, alpha, toY) {
+  const interval = f && f.interval;
+  if (!interval) return;
+  const n = interval.lower.length;
+  if (!n || interval.upper.length !== n) return;
+  ctx.beginPath();
+  ctx.moveTo(xOf(f.t0), toY(anchorV(stroke, f)));
+  for (let i = 0; i < n; i++) ctx.lineTo(xOf(f.t0 + 1 + i), toY(interval.lower[i]));
+  for (let i = n - 1; i >= 0; i--) ctx.lineTo(xOf(f.t0 + 1 + i), toY(interval.upper[i]));
+  ctx.closePath();
+  ctx.fillStyle = hexA(color, 0.13 * alpha);
+  ctx.fill();
+}
+
 function anchorV(stroke, f) {
   const i = clamp(f.t0 - stroke.k0, 0, stroke.ys.length - 1);
   return stroke.ys[i];
@@ -712,6 +787,9 @@ function drawStroke(s, color, width) {
 
 function drawOverlay(stroke, fc, now, baseAlpha) {
   const list = models.filter((m) => m.status === "ready" && !S.off.has(m.key) && fc[m.key]);
+  for (const m of list) {
+    drawBand(stroke, fc[m.key], m.color, alphaFor(m.key) * baseAlpha, yOf);
+  }
   for (const m of list) drawMedian(stroke, fc[m.key], m, 0, now, true);
   for (const m of list) {
     drawMedian(stroke, fc[m.key], m, alphaFor(m.key) * baseAlpha, now, false);
@@ -762,10 +840,12 @@ function drawLanes(now) {
     }
 
     if (f) {
+      const alpha = S.focus && S.focus !== m.key ? 0.2 : 1;
+      drawBand(stroke, f, m.color, alpha, laneY);
       ctx.beginPath();
       ctx.moveTo(xOf(f.t0), laneY(anchorV(stroke, f)));
       for (let j = 0; j < f.median.length; j++) ctx.lineTo(xOf(f.t0 + 1 + j), laneY(blend(f, j, now)));
-      ctx.strokeStyle = hexA(m.color, S.focus && S.focus !== m.key ? 0.2 : 1);
+      ctx.strokeStyle = hexA(m.color, alpha);
       ctx.lineWidth = 2.2;
       ctx.lineJoin = "round";
       ctx.stroke();
@@ -866,6 +946,12 @@ async function makeExportBlob() {
   const cropH = Math.min(H - cropY, plot.y1 - plot.y0 + 16);
   const original = graph.stroke.ys.length;
   const legend = [{ color: INK, text: `Original · ${original} points` }];
+  if (graph.forecasts.some(({ forecast }) => forecast.interval)) {
+    legend.push({
+      color: "rgba(22,24,28,.34)",
+      text: "Central 80% prediction interval · native 0.1–0.9 quantiles",
+    });
+  }
   for (const { model, forecast } of graph.forecasts) {
     const bits = [modelDisplayName(model)];
     const params = parameterLabel(model.parameter_count);
@@ -1039,6 +1125,7 @@ for (const b of document.querySelectorAll(".seg button")) {
   b.addEventListener("click", () => setView(b.dataset.view));
 }
 copyBtn.addEventListener("click", copyGraphImage);
+bandsBtn.addEventListener("click", () => setBands(!S.bands));
 
 for (const b of document.querySelectorAll("[data-preset]")) {
   b.addEventListener("click", () => {
@@ -1113,6 +1200,7 @@ if (window.ResizeObserver) {
 }
 
 layout();
+updateBandChrome();
 const hashPreset = location.hash.replace("#", "");
 if (PRESETS[hashPreset]) setTimeout(() => document.querySelector(`[data-preset="${hashPreset}"]`)?.click(), 60);
 connect();

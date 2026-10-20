@@ -22,6 +22,7 @@
       <button type="button" data-view="overlay" aria-pressed="true">Overlay</button>
       <button type="button" data-view="lanes" aria-pressed="false">Lanes</button>
     </div>
+    <button type="button" id="bands" class="chip" aria-pressed="false" title="Show the central 80% native prediction interval">Bands 80%</button>
     <button type="button" id="copy" class="chip" disabled title="Copy the graph and model legend as a PNG image">Copy image</button>
   </div>
 </header>
@@ -31,6 +32,7 @@
     <div class="cap"><span>The line-up</span><span id="count">warming up</span></div>
     <div id="rows" class="rows"></div>
     <div id="counts" class="counts" aria-live="polite">Original — · Predicted —</div>
+    <p class="band-note hidden" id="bandNote">Shaded bands show each model's <b>80% prediction interval</b> from native 0.1–0.9 quantiles.</p>
     <p class="rail-foot" id="railFoot">Zero-shot median on CPU. Click a model to load or switch it off.</p>
   </section>
 

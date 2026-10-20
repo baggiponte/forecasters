@@ -127,6 +127,11 @@ button:focus-visible { outline: 2px solid #e8590c; outline-offset: 2px; }
   font-variant-numeric: tabular-nums; text-wrap: pretty;
 }
 
+.band-note {
+  margin-top: 8px; font-size: 10px; line-height: 1.45; color: var(--muted);
+  text-wrap: pretty;
+}
+.band-note b { color: var(--ink-2); font-weight: 600; }
 .rail-foot {
   margin-top: 9px; padding-top: 9px; border-top: 1px dashed var(--line);
   font-size: 10.5px; line-height: 1.5; color: var(--muted); text-wrap: pretty;
