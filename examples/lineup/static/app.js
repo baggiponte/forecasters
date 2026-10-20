@@ -25,13 +25,16 @@ const rowsEl = document.getElementById("rows");
 const countEl = document.getElementById("count");
 const subEl = document.getElementById("sub");
 const railFoot = document.getElementById("railFoot");
+const countsEl = document.getElementById("counts");
+const copyBtn = document.getElementById("copy");
 const legendPanel = document.getElementById("legendPanel");
 
 let models = [];
 let W = 0, H = 0, dx = 1, railW = 300, raf = 0, touched = false;
 let plot = { x0: 0, x1: 0, y0: 0, y1: 0 };
 let example = null, ws = null, wsReady = false, reconnectTimer = 0, pollTimer = 0, exampleTimer = 0;
-let strokeSeq = 0;
+let strokeSeq = 0, copyBusy = false, copyFallback = false, copyResetTimer = 0;
+const COPY_TITLE = "Copy the graph and model legend as a PNG image";
 
 const S = {
   view: "overlay",       // overlay | lanes
@@ -57,6 +60,20 @@ const xOf = (k) => plot.x0 + k * dx;
 const yOf = (v) => plot.y1 - v * (plot.y1 - plot.y0);
 const ease = (t) => 1 - Math.pow(1 - t, 3);
 const modelOf = (key) => models.find((m) => m.key === key);
+const modelDisplayName = (m) => `${m.name}${m.variant ? ` ${m.variant}` : ""}`;
+
+function parameterLabel(count) {
+  if (!Number.isFinite(count) || count <= 0) return "";
+  if (count >= 1e6) {
+    const millions = count / 1e6;
+    return `${Number.isInteger(millions) ? millions : millions.toFixed(1)}M parameters`;
+  }
+  if (count >= 1e3) {
+    const thousands = count / 1e3;
+    return `${Number.isInteger(thousands) ? thousands : thousands.toFixed(1)}K parameters`;
+  }
+  return `${count} parameters`;
+}
 
 function hexA(hex, a) {
   const n = parseInt(hex.slice(1), 16);
@@ -261,6 +278,48 @@ function activeFc() {
   return example ? example.fc : S.fc;
 }
 
+function currentGraph() {
+  const stroke = S.stroke || (example && !touched ? example.stroke : null);
+  if (!stroke) return null;
+  const fc = S.stroke ? S.fc : (example && !touched ? example.fc : {});
+  const forecasts = visibleModels()
+    .map((model) => ({ model, forecast: fc[model.key] }))
+    .filter(({ forecast }) => forecast && Array.isArray(forecast.median));
+  return { stroke, fc, forecasts };
+}
+
+function updateCopyAvailability() {
+  const available = !!currentGraph() && !copyBusy;
+  copyBtn.disabled = !available;
+  if (copyBtn.textContent === "Copy image") {
+    copyBtn.title = available ? COPY_TITLE : "Draw a line to copy an image.";
+  }
+}
+
+function updateCounts() {
+  const graph = currentGraph();
+  if (!graph) {
+    countsEl.textContent = "Original — · Predicted —";
+    updateCopyAvailability();
+    return;
+  }
+  const original = Math.min(graph.stroke.ys.length, MAX_CONTEXT);
+  const selected = visibleModels();
+  let predicted = "Predicted —";
+  if (selected.length) {
+    const details = selected.map((m) => {
+      const f = graph.fc[m.key];
+      const value = f && Array.isArray(f.median)
+        ? `${f.median.length} points`
+        : (S.errors[m.key] ? "no result" : "waiting");
+      return selected.length === 1 ? value : `${m.name} ${value}`;
+    });
+    predicted = `Predicted: ${details.join(" · ")}`;
+  }
+  countsEl.textContent = `Original ${original} points · ${predicted}`;
+  updateCopyAvailability();
+}
+
 function updateMsLabels() {
   const fc = activeFc();
   for (const m of models) {
@@ -274,6 +333,7 @@ function updateMsLabels() {
     else if (f && f.ms != null) row.textContent = `${Math.round(f.ms)} ms`;
     else row.textContent = "—";
   }
+  updateCounts();
 }
 
 function loadModel(key) {
@@ -463,6 +523,7 @@ function scheduleExample() {
     S.errors = {};
     invalidate();
   }
+  updateCounts();
   exampleTimer = setTimeout(showExample, 250);
 }
 
@@ -480,6 +541,7 @@ async function showExample() {
   const stroke = exampleStroke();
   const target = { stroke, fc: {}, errors: {}, t0: tipK(stroke) };
   example = target;
+  updateCounts();
   invalidate();
   const ready = visibleModels().map((m) => m.key);
   if (!ready.length) return;
@@ -553,10 +615,7 @@ function frame() {
   }
   ctx.restore();
 
-  const tweening =
-    Object.values(S.fc).some((f) => now - f.at < TWEEN_MS) ||
-    (example && Object.values(example.fc).some((f) => now - f.at < TWEEN_MS));
-  if (tweening) invalidate();
+  if (hasActiveTween(now)) invalidate();
 }
 
 function drawGrid() {
@@ -722,6 +781,164 @@ function label(text, x, y, font, color, align = "left") {
   ctx.fillText(text, x, y);
 }
 
+// ------------------------------------------------------------------ copy image
+function hasActiveTween(now = performance.now()) {
+  return Object.values(activeFc()).some((f) => f && f.at != null && now - f.at < TWEEN_MS);
+}
+
+async function waitForSettledGraph() {
+  await document.fonts.ready;
+  while (hasActiveTween()) await new Promise((resolve) => setTimeout(resolve, 30));
+  await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+}
+
+function restoreCopyButton() {
+  clearTimeout(copyResetTimer);
+  copyResetTimer = 0;
+  copyFallback = false;
+  copyBtn.textContent = "Copy image";
+  copyBtn.title = currentGraph() ? COPY_TITLE : "Draw a line to copy an image.";
+  updateCopyAvailability();
+}
+
+function showCopyFeedback(text, title, ms) {
+  copyBtn.textContent = text;
+  copyBtn.title = title;
+  clearTimeout(copyResetTimer);
+  copyResetTimer = setTimeout(restoreCopyButton, ms);
+  updateCopyAvailability();
+}
+
+function offerDownload(message) {
+  copyFallback = true;
+  showCopyFeedback("Download", `${message}. Click to download the PNG instead.`, 6000);
+  announce(`${message}. Use Download for a PNG instead.`);
+}
+
+function downloadBlob(blob) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "line-up.png";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+async function makeExportBlob() {
+  await waitForSettledGraph();
+  const graph = currentGraph();
+  if (!graph) throw new Error("Nothing is plotted");
+  const scale = canvas.width / W;
+  const cropX = Math.max(0, plot.x0 - 10);
+  const cropY = Math.max(0, plot.y0 - 8);
+  const cropW = Math.min(W - cropX, plot.x1 - plot.x0 + 20);
+  const cropH = Math.min(H - cropY, plot.y1 - plot.y0 + 16);
+  const original = Math.min(graph.stroke.ys.length, MAX_CONTEXT);
+  const legend = [{ color: INK, text: `Original · ${original} points` }];
+  for (const { model, forecast } of graph.forecasts) {
+    const bits = [modelDisplayName(model)];
+    const params = parameterLabel(model.parameter_count);
+    if (params) bits.push(params);
+    bits.push(`${forecast.median.length} forecast points`);
+    legend.push({ color: model.color, text: bits.join(" · ") });
+  }
+
+  const rowH = 18;
+  const topPad = 13;
+  const bottomPad = 11;
+  const footerH = topPad + bottomPad + legend.length * rowH;
+  const outW = Math.max(1, Math.round(cropW));
+  const outH = Math.max(1, Math.round(cropH + footerH));
+  const out = document.createElement("canvas");
+  out.width = Math.max(1, Math.round(outW * scale));
+  out.height = Math.max(1, Math.round(outH * scale));
+  const g = out.getContext("2d");
+  if (!g) throw new Error("Canvas is unavailable");
+
+  g.setTransform(scale, 0, 0, scale, 0, 0);
+  g.fillStyle = PAPER;
+  g.fillRect(0, 0, outW, outH);
+  g.drawImage(
+    canvas,
+    Math.round(cropX * scale), Math.round(cropY * scale),
+    Math.round(cropW * scale), Math.round(cropH * scale),
+    0, 0, outW, cropH
+  );
+  g.strokeStyle = "rgba(22,24,28,.16)";
+  g.lineWidth = 1;
+  g.beginPath();
+  g.moveTo(0, cropH + 0.5);
+  g.lineTo(outW, cropH + 0.5);
+  g.stroke();
+
+  g.font = "500 10.5px 'IBM Plex Sans', system-ui, sans-serif";
+  g.textAlign = "left";
+  g.textBaseline = "middle";
+  for (let i = 0; i < legend.length; i++) {
+    const row = legend[i];
+    const y = cropH + topPad + rowH * i + rowH / 2;
+    g.strokeStyle = row.color;
+    g.lineWidth = 3;
+    g.lineCap = "round";
+    g.beginPath();
+    g.moveTo(13, y);
+    g.lineTo(31, y);
+    g.stroke();
+    g.fillStyle = INK;
+    g.fillText(row.text, 39, y);
+  }
+
+  return await new Promise((resolve, reject) => {
+    out.toBlob((blob) => blob ? resolve(blob) : reject(new Error("PNG encoding failed")), "image/png");
+  });
+}
+
+async function copyGraphImage() {
+  if (copyBusy) return;
+  if (!currentGraph()) {
+    showCopyFeedback("No graph", "Draw a line first.", 1800);
+    return;
+  }
+  copyBusy = true;
+  updateCopyAvailability();
+  let blob;
+  try {
+    blob = await makeExportBlob();
+  } catch (e) {
+    copyBusy = false;
+    showCopyFeedback("Copy failed", `Could not render the image: ${String(e.message || e)}`, 3000);
+    announce("Could not render the image.");
+    updateCopyAvailability();
+    return;
+  }
+
+  try {
+    if (copyFallback) {
+      downloadBlob(blob);
+      copyFallback = false;
+      showCopyFeedback("Downloaded", "PNG downloaded.", 1800);
+      announce("PNG downloaded.");
+      return;
+    }
+    if (!navigator.clipboard || typeof navigator.clipboard.write !== "function" || typeof ClipboardItem === "undefined") {
+      offerDownload("Clipboard unavailable");
+      return;
+    }
+    await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
+    copyFallback = false;
+    showCopyFeedback("Copied", "PNG copied to the clipboard.", 1800);
+    announce("Graph image copied to the clipboard.");
+  } catch (e) {
+    const denied = e && (e.name === "NotAllowedError" || e.name === "SecurityError");
+    offerDownload(denied ? "Clipboard permission denied" : "Could not copy the image");
+  } finally {
+    copyBusy = false;
+    updateCopyAvailability();
+  }
+}
+
 // ------------------------------------------------------------------ input
 function insidePlot(x, y) {
   return x >= plot.x0 - 8 && x <= plot.x1 + 8 && y >= plot.y0 - 8 && y <= plot.y1 + 8;
@@ -749,6 +966,7 @@ canvas.addEventListener("pointerdown", (e) => {
   S.focus = null;
   setHint(HINT.draw);
   addPoint(S.stroke, e.clientX, e.clientY);
+  updateCounts();
   invalidate();
 });
 
@@ -756,6 +974,7 @@ canvas.addEventListener("pointermove", (e) => {
   if (e.pointerId !== S.pointer || !S.stroke) return;
   for (const p of pointsOf(e)) addPoint(S.stroke, p.clientX, p.clientY);
   requestForecast(false);
+  updateCounts();
   invalidate();
 });
 
@@ -770,6 +989,7 @@ function endStroke(e) {
     return;
   }
   requestForecast(true);
+  updateCounts();
   invalidate();
 }
 
@@ -788,6 +1008,7 @@ function setView(view) {
 for (const b of document.querySelectorAll(".seg button")) {
   b.addEventListener("click", () => setView(b.dataset.view));
 }
+copyBtn.addEventListener("click", copyGraphImage);
 
 for (const b of document.querySelectorAll("[data-preset]")) {
   b.addEventListener("click", () => {
@@ -801,6 +1022,7 @@ for (const b of document.querySelectorAll("[data-preset]")) {
     S.lastSeq = {};
     setHint("A synthetic line, to compare the models on something repeatable.");
     requestForecast(true);
+    updateCounts();
     invalidate();
   });
 }
@@ -843,6 +1065,7 @@ function onResize() {
   layout();
   relayoutStrokes();
   if (!touched && !S.stroke) scheduleExample();
+  updateCounts();
   invalidate();
 }
 

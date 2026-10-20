@@ -70,6 +70,7 @@ h1 {
 .seg button[aria-pressed="true"] { background: #fff; color: var(--ink); box-shadow: 0 1px 3px rgba(20, 20, 20, .12); }
 .chip { border-color: var(--line); background: rgba(255, 255, 255, .42); backdrop-filter: blur(10px); }
 .chip[aria-pressed="false"] { opacity: .62; }
+.chip:disabled { opacity: .45; cursor: default; }
 .chip.solid { background: var(--ink); color: var(--paper); border-color: var(--ink); }
 .chip.solid:hover { background: #2a2d33; color: var(--paper); }
 .chip.solid[aria-pressed="true"] { background: #b33a13; border-color: #b33a13; }
@@ -120,8 +121,14 @@ button:focus-visible { outline: 2px solid #e8590c; outline-offset: 2px; }
 .mrow.loading .mms { animation: pulse 1.4s ease-in-out infinite; }
 @keyframes pulse { 0%, 100% { opacity: .3; } 50% { opacity: 1; } }
 
+.counts {
+  margin-top: 10px; padding-top: 9px; border-top: 1px dashed var(--line);
+  font-size: 10.5px; line-height: 1.45; color: var(--ink-2);
+  font-variant-numeric: tabular-nums; text-wrap: pretty;
+}
+
 .rail-foot {
-  margin-top: 12px; padding-top: 11px; border-top: 1px dashed var(--line);
+  margin-top: 9px; padding-top: 9px; border-top: 1px dashed var(--line);
   font-size: 10.5px; line-height: 1.5; color: var(--muted); text-wrap: pretty;
 }
 
@@ -180,10 +187,10 @@ button:focus-visible { outline: 2px solid #e8590c; outline-offset: 2px; }
   h1 { font-size: 23px; }
   .sub { display: none; }
   #hint { font-size: 12px; max-width: 58vw; margin-top: 6px; line-height: 1.4; }
-  .controls { gap: 5px; flex-wrap: nowrap; flex: none; }
-  .seg button, .chip { font-size: 10.5px; padding: 6px 9px; }
+  .controls { gap: 4px; flex-wrap: nowrap; flex: none; }
+  .seg button, .chip { font-size: 10.5px; padding: 6px 8px; }
   #bands { display: none; }
-  #hint { max-width: 46vw; }
+  #hint { max-width: 32vw; }
   #rail {
     top: auto; bottom: 0; left: 0; right: 0; width: auto; height: 176px;
     padding: 10px 12px 12px; border-left: 0; border-top: 1px solid var(--line);
@@ -197,7 +204,8 @@ button:focus-visible { outline: 2px solid #e8590c; outline-offset: 2px; }
   .mname { font-size: 11px; }
   .mmeta { display: none; }
   .mms { font-size: 9px; width: 42px; white-space: nowrap; }
-  .rail-foot { display: block; font-size: 9px; line-height: 1.4; margin-top: 7px; padding-top: 7px; }
+  .counts { font-size: 9px; line-height: 1.35; margin-top: 6px; padding-top: 6px; }
+  .rail-foot { display: block; font-size: 9px; line-height: 1.4; margin-top: 6px; padding-top: 6px; }
   .bottom { right: 0; bottom: 190px; padding: 0 12px 8px; }
   .presets { display: none; }
   #status { max-width: none; font-size: 9.5px; }

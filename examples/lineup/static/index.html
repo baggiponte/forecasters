@@ -22,6 +22,7 @@
       <button type="button" data-view="overlay" aria-pressed="true">Overlay</button>
       <button type="button" data-view="lanes" aria-pressed="false">Lanes</button>
     </div>
+    <button type="button" id="copy" class="chip" disabled title="Copy the graph and model legend as a PNG image">Copy image</button>
   </div>
 </header>
 
@@ -29,6 +30,7 @@
   <section id="legendPanel">
     <div class="cap"><span>The line-up</span><span id="count">warming up</span></div>
     <div id="rows" class="rows"></div>
+    <div id="counts" class="counts" aria-live="polite">Original — · Predicted —</div>
     <p class="rail-foot" id="railFoot">Zero-shot median on CPU. Click a model to load or switch it off.</p>
   </section>
 
