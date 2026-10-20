@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Line-up — five time-series models finish your line</title>
-<meta name="description" content="Draw a line. Two small time-series foundation models forecast the rest with intervals; load three more, compare them, then score them on your own continuation.">
+<title>Line-up — small time-series models finish your line</title>
+<meta name="description" content="Draw a line. Two small time-series foundation models forecast the median continuation on your CPU.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M1 11 Q4 4 7 9' fill='none' stroke='%2316181c' stroke-width='2'/%3E%3Cpath d='M7 9 L15 5' fill='none' stroke='%23e8590c' stroke-width='1.6'/%3E%3Cpath d='M7 9 L15 8' fill='none' stroke='%230b7285' stroke-width='1.6'/%3E%3Cpath d='M7 9 L15 11' fill='none' stroke='%236741d9' stroke-width='1.6'/%3E%3C/svg%3E">
 <link rel="stylesheet" href="/static/style.css">
 </head>
@@ -22,8 +22,6 @@
       <button type="button" data-view="overlay" aria-pressed="true">Overlay</button>
       <button type="button" data-view="lanes" aria-pressed="false">Lanes</button>
     </div>
-    <button type="button" id="bands" class="chip" aria-pressed="true" title="Show each model's 80% interval">Bands</button>
-    <button type="button" id="test" class="chip solid" aria-pressed="false">Test the models</button>
   </div>
 </header>
 
@@ -31,16 +29,9 @@
   <section id="legendPanel">
     <div class="cap"><span>The line-up</span><span id="count">warming up</span></div>
     <div id="rows" class="rows"></div>
-    <p class="rail-foot" id="railFoot">Zero-shot on CPU. Hover a model to isolate its interval; click to switch it off.</p>
+    <p class="rail-foot" id="railFoot">Zero-shot median on CPU. Click a model to load or switch it off.</p>
   </section>
 
-  <section id="scorePanel" class="hidden">
-    <div class="cap"><span>Your line, scored</span><span id="round"></span></div>
-    <p class="score-sub">Ranked by quantile score — lower is better. Miss is the average gap between a model's median and your line.</p>
-    <div id="scoreRows"></div>
-    <div id="season" class="season"></div>
-    <button type="button" id="again" class="wide">Draw another</button>
-  </section>
 </aside>
 
 <footer class="bottom">

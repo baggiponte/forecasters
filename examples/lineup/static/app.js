@@ -4,19 +4,15 @@
 const STEPS = 160;          // one value per step across the screen
 const MIN_POINTS = 12;      // below this a forecast is mostly fan
 const MAX_CONTEXT = 160;    // what the models read: the last 160 values
-const MAX_H = 160;          // the longest horizon the zoo was configured for
+const MAX_H = 160;          // fallback until a ready model reports its native cap
 const TWEEN_MS = matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 220;
 const MAX_DPR = 2;
 const PAPER = "#f7f4ed";
 const INK = "#16181c";
-const LEVELS = [0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95];
 const RED = "#c92a2a";
 
 const HINT = {
   draw: "Draw a line from left to right. The models forecast the rest.",
-  testCtx: "Draw a line, then lift. The models freeze a forecast there.",
-  testCont: "Now draw how it actually goes on — start at the end of your line.",
-  testScored: "Touch to start another test.",
 };
 
 // ------------------------------------------------------------------ dom & state
@@ -30,11 +26,6 @@ const countEl = document.getElementById("count");
 const subEl = document.getElementById("sub");
 const railFoot = document.getElementById("railFoot");
 const legendPanel = document.getElementById("legendPanel");
-const scorePanel = document.getElementById("scorePanel");
-const scoreRows = document.getElementById("scoreRows");
-const seasonEl = document.getElementById("season");
-const testBtn = document.getElementById("test");
-const bandsBtn = document.getElementById("bands");
 
 let models = [];
 let W = 0, H = 0, dx = 1, railW = 300, raf = 0, touched = false;
@@ -44,22 +35,19 @@ let strokeSeq = 0;
 
 const S = {
   view: "overlay",       // overlay | lanes
-  bands: true,
-  mode: "draw",          // draw | test
-  phase: "idle",         // idle | context | frozen | continuation | scored
   stroke: null,
-  cont: null,
-  fc: {},                // key -> { q, from, t0, at, ms, seq }
+  fc: {},                // key -> { median, from, t0, at, ms, seq }
   lastSeq: {},           // per model, the newest answer applied
+  errors: {},            // per model, newest forecast/load error text
   off: new Set(),         // models the user switched off (or has not loaded)
   want: new Set(),        // models the user asked the server to load
   initialized: false,
   focus: null,
   seq: 0,
-  sent: new Map(),       // seq -> { id, t0 }
+  generation: 0,          // invalidates replies from an older stroke/toggle/preset
+  sent: new Map(),       // seq -> { id, t0, generation }
   lastSend: 0,
   pointer: null,
-  round: 0,
   modelSig: "",
 };
 
@@ -75,9 +63,8 @@ function hexA(hex, a) {
   return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
 }
 
-function setHint(text, scored = false) {
+function setHint(text) {
   hintEl.textContent = text;
-  hintEl.classList.toggle("score", scored);
 }
 
 function setStatus(html) {
@@ -115,8 +102,6 @@ function layout() {
   const bottom = mobile ? 210 : 66;
   plot = { x0: 14, x1: W - railW - 14, y0: top, y1: H - bottom };
   dx = (plot.x1 - plot.x0) / STEPS;
-
-  testBtn.textContent = testLabel();
 }
 
 // ------------------------------------------------------------------ strokes
@@ -206,7 +191,7 @@ async function loadModels() {
       buildRows();
       updateCount();
       scheduleExample();
-      if (S.stroke && touched && S.mode !== "test") requestForecast(true);
+      if (S.stroke && touched) requestForecast(true);
     }
     if (data.models.some((m) => m.status === "loading") || S.want.size) {
       clearTimeout(pollTimer);
@@ -261,8 +246,8 @@ function updateChrome() {
   subEl.textContent = `${total} small time-series foundation model${total === 1 ? "" : "s"}` +
     (defaults < total ? `. Start with ${defaults}.` : ".");
   railFoot.textContent = defaults < total
-    ? `${defaults} model${defaults === 1 ? " is" : "s are"} on to start. Click a greyed model to load and add it. Hover one to isolate its interval.`
-    : "Zero-shot on CPU. Hover a model to isolate its interval; click to switch it off.";
+    ? `${defaults} model${defaults === 1 ? " is" : "s are"} on to start. Click a greyed model to load and add it. Hover one to emphasise it.`
+    : "Zero-shot median on CPU. Hover a model to emphasise it; click to switch it off.";
 }
 
 function updateCount() {
@@ -285,6 +270,7 @@ function updateMsLabels() {
     if (m.status === "idle") row.textContent = "load";
     else if (m.status !== "ready") row.textContent = statusText(m);
     else if (S.off.has(m.key)) row.textContent = "off";
+    else if (S.errors[m.key]) row.textContent = "error";
     else if (f && f.ms != null) row.textContent = `${Math.round(f.ms)} ms`;
     else row.textContent = "—";
   }
@@ -294,6 +280,7 @@ function loadModel(key) {
   const m = modelOf(key);
   if (!m || S.want.has(key) || m.status === "loading") return;
   S.want.add(key);
+  delete S.errors[key];
   setStatus(`Loading ${m.name} (${m.variant})…`);
   fetch(`/api/models/${key}/load`, { method: "POST" })
     .then((r) => { if (!r.ok) throw new Error(r.status); })
@@ -323,17 +310,26 @@ function toggleModel(key) {
     setStatus(m.error ? `${m.name}: ${m.error.split("\n")[0]}` : `${m.name} is ${statusText(m)}.`);
     return;
   }
+  S.generation += 1;
+  delete S.errors[key];
   if (S.off.has(key)) S.off.delete(key); else S.off.add(key);
   if (S.off.has(key)) delete S.fc[key];
   buildRows();
   updateCount();
-  if (S.stroke && !S.off.has(key)) requestForecast(true);
-  else if (!S.stroke && !touched) scheduleExample();
+  if (S.stroke) requestForecast(true);
+  else if (!touched) scheduleExample();
   invalidate();
 }
 
 function visibleModels() {
   return models.filter((m) => m.status === "ready" && !S.off.has(m.key));
+}
+
+function nativeHorizonCap() {
+  const caps = visibleModels()
+    .map((m) => m.max_horizon)
+    .filter((h) => Number.isInteger(h) && h > 0);
+  return caps.length ? Math.min(...caps) : MAX_H;
 }
 
 function alphaFor(key) {
@@ -372,44 +368,48 @@ function connect() {
   };
 }
 
+function validSent(m) {
+  const sent = S.sent.get(m.seq);
+  if (!sent) return null;
+  if (!S.stroke || S.stroke.id !== sent.id) return null;
+  if (sent.generation !== S.generation) return null;
+  if (m.key && S.off.has(m.key)) return null;
+  return sent;
+}
+
 function handleMessage(m) {
   if (m.type === "error") {
+    const sent = m.seq == null ? null : validSent(m);
+    if (m.seq != null && !sent) return;
     const model = modelOf(m.key);
-    setStatus(`${model ? model.name : m.key}: ${String(m.error).split("\n")[0]}`);
+    const text = String(m.error).split("\n")[0];
+    if (m.key) S.errors[m.key] = text;
+    setStatus(`${model ? model.name : m.key || "Server"}: ${text}`);
+    updateMsLabels();
     return;
   }
   if (m.type !== "forecast") return;
-  const sent = S.sent.get(m.seq);
+  const sent = validSent(m);
   if (!sent) return;
-  if (!S.stroke || S.stroke.id !== sent.id) return;
-  if (S.off.has(m.key)) return;
   if (m.seq < (S.lastSeq[m.key] || 0)) return;
-  if (S.mode === "test" && S.phase === "scored") return;
+  if (!Array.isArray(m.median) || !m.median.every((v) => Number.isFinite(v))) return;
   S.lastSeq[m.key] = m.seq;
+  delete S.errors[m.key];
   applyForecast(m.key, m, sent.t0);
 }
 
-function smooth(q, r = 4) {
-  return q.map((row) => row.map((_, i) => {
-    const w = Math.min(r, i);
-    let sum = 0, n = 0;
-    for (let j = Math.max(0, i - w); j <= Math.min(row.length - 1, i + w); j++) { sum += row[j]; n++; }
-    return sum / n;
-  }));
-}
-
 function applyForecast(key, msg, t0) {
-  const q = smooth(msg.q, key === "toto" ? 6 : 4);
+  const median = msg.median.slice();
   const prev = S.fc[key];
-  let from = q;
-  if (prev && prev.q && prev.q.length === q.length) {
+  let from = median;
+  if (prev && prev.median && prev.median.length === median.length) {
     const shift = t0 - prev.t0;
-    from = q.map((row, lv) => row.map((v, i) => {
+    from = median.map((v, i) => {
       const j = i + shift;
-      return j >= 0 && j < prev.q[lv].length ? prev.q[lv][j] : v;
-    }));
+      return j >= 0 && j < prev.median.length ? prev.median[j] : v;
+    });
   }
-  S.fc[key] = { q, from, t0, at: performance.now(), ms: msg.ms, seq: msg.seq };
+  S.fc[key] = { median, from, t0, at: performance.now(), ms: msg.ms, seq: msg.seq };
   updateMsLabels();
   updateBestStatus();
   invalidate();
@@ -428,22 +428,21 @@ function updateBestStatus() {
 function requestForecast(final = false) {
   const s = S.stroke;
   if (!s || s.ys.length < MIN_POINTS || !wsReady) return 0;
-  if (S.mode === "test" && S.phase !== "context") return 0;
+  const keys = visibleModels().map((m) => m.key);
+  if (!keys.length) return 0;
   const now = performance.now();
   if (!final && now - S.lastSend < 85) return 0;
-  S.lastSend = now;
   const t0 = tipK(s);
-  const h = Math.min(MAX_H, STEPS - 1 - t0);
+  const h = Math.min(nativeHorizonCap(), STEPS - 1 - t0);
   if (h < 4) return 0;
+  S.lastSend = now;
   const seq = ++S.seq;
-  S.sent.set(seq, { id: s.id, t0 });
+  S.sent.set(seq, { id: s.id, t0, generation: S.generation });
   for (const k of S.sent.keys()) { if (k < seq - 40) S.sent.delete(k); else break; }
-  const keys = visibleModels().map((m) => m.key);
-  if (!keys.length) return seq;
   ws.send(JSON.stringify({
     type: "forecast",
     seq,
-    y: s.ys.slice(-MAX_CONTEXT).map((v) => Math.round(v * 1e5) / 1e5),
+    y: s.ys.slice(-MAX_CONTEXT),
     h,
     models: keys,
   }));
@@ -462,21 +461,28 @@ async function showExample() {
   const target = { stroke, fc: {}, t0: tipK(stroke) };
   example = target;
   invalidate();
-  const ready = models.filter((m) => m.status === "ready" && !S.off.has(m.key)).map((m) => m.key);
+  const ready = visibleModels().map((m) => m.key);
   if (!ready.length) return;
+  const h = Math.min(nativeHorizonCap(), STEPS - 1 - target.t0);
+  if (h < 4) return;
   try {
     const res = await fetch("/api/forecast", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ y: stroke.ys, h: STEPS - 1 - target.t0, models: ready }),
+      body: JSON.stringify({ y: stroke.ys, h, models: ready }),
     });
     if (!res.ok) return;
     const data = await res.json();
     if (example !== target || touched) return;
     for (const [key, msg] of Object.entries(data.results || {})) {
-      if (!msg || msg.error) continue;
-      const q = smooth(msg.q, key === "toto" ? 6 : 4);
-      target.fc[key] = { q, from: q, t0: target.t0, at: performance.now(), ms: msg.ms };
+      if (!msg || msg.error || !Array.isArray(msg.median)) continue;
+      target.fc[key] = {
+        median: msg.median.slice(),
+        from: msg.median.slice(),
+        t0: target.t0,
+        at: performance.now(),
+        ms: msg.ms,
+      };
     }
     updateMsLabels();
     updateBestStatus();
@@ -500,7 +506,6 @@ function frame() {
     drawGrid();
     if (example && !S.stroke && !touched) drawOverlay(example.stroke, example.fc, now, 0.68);
     if (S.stroke) drawOverlay(S.stroke, S.fc, now, 1);
-    if (S.cont) drawContinuation(S.cont, null);
   }
   ctx.restore();
 
@@ -526,9 +531,9 @@ function drawGrid() {
   ctx.restore();
 }
 
-function blend(f, lv, i, now) {
+function blend(f, i, now) {
   const t = TWEEN_MS ? Math.min(1, (now - f.at) / TWEEN_MS) : 1;
-  return f.from[lv][i] + (f.q[lv][i] - f.from[lv][i]) * ease(t);
+  return f.from[i] + (f.median[i] - f.from[i]) * ease(t);
 }
 
 function anchorV(stroke, f) {
@@ -536,23 +541,11 @@ function anchorV(stroke, f) {
   return stroke.ys[i];
 }
 
-function drawBand(stroke, f, model, lo, hi, alpha, now) {
-  const n = f.q[0].length;
-  const x0 = xOf(f.t0), y0 = yOf(anchorV(stroke, f));
-  ctx.beginPath();
-  ctx.moveTo(x0, y0);
-  for (let i = 0; i < n; i++) ctx.lineTo(xOf(f.t0 + 1 + i), yOf(blend(f, hi, i, now)));
-  for (let i = n - 1; i >= 0; i--) ctx.lineTo(xOf(f.t0 + 1 + i), yOf(blend(f, lo, i, now)));
-  ctx.closePath();
-  ctx.fillStyle = hexA(model.color, alpha);
-  ctx.fill();
-}
-
 function drawMedian(stroke, f, model, alpha, now, halo) {
-  const n = f.q[0].length;
+  const n = f.median.length;
   ctx.beginPath();
   ctx.moveTo(xOf(f.t0), yOf(anchorV(stroke, f)));
-  for (let i = 0; i < n; i++) ctx.lineTo(xOf(f.t0 + 1 + i), yOf(blend(f, 3, i, now)));
+  for (let i = 0; i < n; i++) ctx.lineTo(xOf(f.t0 + 1 + i), yOf(blend(f, i, now)));
   ctx.lineJoin = "round";
   ctx.lineCap = "round";
   ctx.lineWidth = halo ? 5 : 2.3;
@@ -587,43 +580,18 @@ function drawStroke(s, color, width) {
 
 function drawOverlay(stroke, fc, now, baseAlpha) {
   const list = models.filter((m) => m.status === "ready" && !S.off.has(m.key) && fc[m.key]);
-  const testing = S.mode === "test" && stroke === S.stroke && (S.phase === "continuation" || S.phase === "scored");
-  if (testing) {
-    const x = Math.round(xOf(tipK(stroke))) + 0.5;
-    ctx.beginPath();
-    ctx.moveTo(x, plot.y0);
-    ctx.lineTo(x, plot.y1);
-    ctx.strokeStyle = "rgba(22,24,28,.16)";
-    ctx.setLineDash([3, 5]);
-    ctx.lineWidth = 1;
-    ctx.stroke();
-    ctx.setLineDash([]);
-  }
-  if (S.bands) {
-    const strong = list.length <= 2 || S.focus;
-    for (const m of list) {
-      const a = alphaFor(m.key) * baseAlpha;
-      if (S.focus && m.key !== S.focus) continue;
-      drawBand(stroke, fc[m.key], m, 1, 5, (strong ? 0.085 : 0.05) * a, now);
-      if (S.focus === m.key) drawBand(stroke, fc[m.key], m, 2, 4, 0.10 * a, now);
-    }
-  }
   for (const m of list) drawMedian(stroke, fc[m.key], m, 0, now, true);
   for (const m of list) {
     drawMedian(stroke, fc[m.key], m, alphaFor(m.key) * baseAlpha, now, false);
   }
-  drawStroke(stroke, `rgba(22,24,28,${(testing ? 0.38 : 0.92) * baseAlpha})`, 3);
-  if (!stroke.done && !testing && stroke.raw.length) {
+  drawStroke(stroke, `rgba(22,24,28,${0.92 * baseAlpha})`, 3);
+  if (!stroke.done && stroke.raw.length) {
     const tip = stroke.raw[stroke.raw.length - 1];
     ctx.beginPath();
     ctx.arc(tip[0], tip[1], 4.2, 0, Math.PI * 2);
     ctx.fillStyle = `rgba(22,24,28,${0.92 * baseAlpha})`;
     ctx.fill();
   }
-}
-
-function laneOf(ys, k0) {
-  return { ys, k0 };
 }
 
 function drawLanes(now) {
@@ -662,20 +630,9 @@ function drawLanes(now) {
     }
 
     if (f) {
-      if (S.bands) {
-        const n = f.q[0].length;
-        const x0 = xOf(f.t0), y0 = laneY(anchorV(stroke, f));
-        ctx.beginPath();
-        ctx.moveTo(x0, y0);
-        for (let j = 0; j < n; j++) ctx.lineTo(xOf(f.t0 + 1 + j), laneY(blend(f, 5, j, now)));
-        for (let j = n - 1; j >= 0; j--) ctx.lineTo(xOf(f.t0 + 1 + j), laneY(blend(f, 1, j, now)));
-        ctx.closePath();
-        ctx.fillStyle = hexA(m.color, S.focus && S.focus !== m.key ? 0.03 : 0.12);
-        ctx.fill();
-      }
       ctx.beginPath();
       ctx.moveTo(xOf(f.t0), laneY(anchorV(stroke, f)));
-      for (let j = 0; j < f.q[0].length; j++) ctx.lineTo(xOf(f.t0 + 1 + j), laneY(blend(f, 3, j, now)));
+      for (let j = 0; j < f.median.length; j++) ctx.lineTo(xOf(f.t0 + 1 + j), laneY(blend(f, j, now)));
       ctx.strokeStyle = hexA(m.color, S.focus && S.focus !== m.key ? 0.2 : 1);
       ctx.lineWidth = 2.2;
       ctx.lineJoin = "round";
@@ -700,23 +657,6 @@ function drawLanes(now) {
     label(meta, plot.x1 - 2, top + 17.5, "500 10px 'IBM Plex Sans', system-ui, sans-serif", "rgba(22,24,28,.42)", "right");
   });
 
-  if (S.cont) {
-    const laneH2 = (plot.y1 - plot.y0) / list.length;
-    list.forEach((m, i) => {
-      const top = plot.y0 + i * laneH2;
-      const lane = { y0: top + 9, y1: top + laneH2 - 11 };
-      const laneY = (v) => lane.y1 - v * (lane.y1 - lane.y0);
-      ctx.beginPath();
-      S.cont.ys.forEach((v, j) => {
-        const x = xOf(S.cont.k0 + j), y = laneY(v);
-        if (j) ctx.lineTo(x, y); else ctx.moveTo(x, y);
-      });
-      ctx.strokeStyle = INK;
-      ctx.lineWidth = 2;
-      ctx.stroke();
-    });
-  }
-
   if (stroke && stroke.raw.length && !stroke.done) {
     const tipV = stroke.ys[stroke.ys.length - 1];
     ctx.beginPath();
@@ -724,19 +664,6 @@ function drawLanes(now) {
     ctx.fillStyle = INK;
     ctx.fill();
   }
-}
-
-function drawContinuation(cont) {
-  ctx.beginPath();
-  cont.ys.forEach((v, j) => {
-    const x = xOf(cont.k0 + j), y = yOf(v);
-    if (j) ctx.lineTo(x, y); else ctx.moveTo(x, y);
-  });
-  ctx.strokeStyle = INK;
-  ctx.lineWidth = 3;
-  ctx.lineJoin = "round";
-  ctx.lineCap = "round";
-  ctx.stroke();
 }
 
 function label(text, x, y, font, color, align = "left") {
@@ -765,241 +692,46 @@ canvas.addEventListener("pointerdown", (e) => {
   if (S.pointer !== null || !e.isPrimary || (e.pointerType === "mouse" && e.button !== 0)) return;
   if (!insidePlot(e.clientX, e.clientY)) return;
 
-  if (S.mode === "test" && S.phase === "scored") { startTest(); return; }
-  if (S.mode === "test" && S.phase === "frozen") return;
-  if (S.mode === "test" && S.phase === "continuation") {
-    if (!S.fc || !Object.keys(S.fc).length) return;
-    const tip = tipK(S.stroke);
-    if (e.clientX < xOf(tip) - 36) return;
-    S.pointer = e.pointerId;
-    try { canvas.setPointerCapture(e.pointerId); } catch (err) {}
-    S.cont = newStroke();
-    addPoint(S.cont, e.clientX, e.clientY);
-    invalidate();
-    return;
-  }
-
   S.pointer = e.pointerId;
   try { canvas.setPointerCapture(e.pointerId); } catch (err) {}
   touched = true;
   example = null;
+  S.generation += 1;
   S.stroke = newStroke();
-  S.cont = null;
   S.fc = {};
+  S.errors = {};
   S.sent.clear();
   S.lastSeq = {};
   S.focus = null;
-  if (S.mode === "test") {
-    S.phase = "context";
-    setHint(HINT.testCtx);
-    hideScores();
-  } else {
-    S.phase = "idle";
-    setHint(HINT.draw);
-  }
+  setHint(HINT.draw);
   addPoint(S.stroke, e.clientX, e.clientY);
   invalidate();
 });
 
 canvas.addEventListener("pointermove", (e) => {
-  if (e.pointerId !== S.pointer) return;
-  const target = S.cont || S.stroke;
-  if (!target) return;
-  for (const p of pointsOf(e)) addPoint(target, p.clientX, p.clientY);
-  if (!S.cont) requestForecast(false);
+  if (e.pointerId !== S.pointer || !S.stroke) return;
+  for (const p of pointsOf(e)) addPoint(S.stroke, p.clientX, p.clientY);
+  requestForecast(false);
   invalidate();
 });
 
 function endStroke(e) {
   if (e.pointerId !== S.pointer) return;
   S.pointer = null;
-  if (S.cont) {
-    S.cont.done = true;
-    scoreRound();
-    return;
-  }
   if (!S.stroke) return;
   S.stroke.done = true;
   if (S.stroke.ys.length < MIN_POINTS) {
-    if (S.mode === "test") {
-      S.phase = "idle";
-      setHint("Too short to forecast. Draw a longer line.");
-    }
+    setHint("Too short to forecast. Draw a longer line.");
     invalidate();
     return;
   }
-  const seq = requestForecast(true);
-  if (S.mode === "test") freeze(seq);
+  requestForecast(true);
   invalidate();
 }
 
 canvas.addEventListener("pointerup", endStroke);
 canvas.addEventListener("pointercancel", endStroke);
 canvas.addEventListener("lostpointercapture", endStroke);
-
-// ------------------------------------------------------------------ test mode
-function testLabel() {
-  if (S.mode === "test") return innerWidth <= 760 ? "Exit" : "Exit test";
-  return innerWidth <= 760 ? "Test" : "Test the models";
-}
-
-function startTest() {
-  S.mode = "test";
-  S.phase = "idle";
-  S.stroke = S.cont = null;
-  S.fc = {};
-  S.sent.clear();
-  example = null;
-  touched = true;
-  hideScores();
-  setHint(HINT.testCtx);
-  testBtn.setAttribute("aria-pressed", "true");
-  testBtn.textContent = testLabel();
-  invalidate();
-}
-
-function exitTest() {
-  S.mode = "draw";
-  S.phase = "idle";
-  S.stroke = S.cont = null;
-  S.fc = {};
-  S.sent.clear();
-  hideScores();
-  setHint(HINT.draw);
-  testBtn.setAttribute("aria-pressed", "false");
-  testBtn.textContent = testLabel();
-  invalidate();
-}
-
-testBtn.addEventListener("click", () => (S.mode === "test" ? exitTest() : startTest()));
-
-function hideScores() {
-  scorePanel.classList.add("hidden");
-  legendPanel.classList.remove("hidden");
-}
-
-function freeze(finalSeq) {
-  S.phase = "frozen";
-  setHint("Freezing the forecast…");
-  let tries = 0;
-  const tick = () => {
-    const have = Object.values(S.fc).some((f) => f.seq >= finalSeq);
-    if (have || tries++ > 10) {
-      S.phase = "continuation";
-      setHint(HINT.testCont);
-      announce("Forecast frozen. Draw how the line actually continues.");
-      invalidate();
-    } else {
-      setTimeout(tick, 80);
-    }
-  };
-  tick();
-}
-
-function scoreRound() {
-  if (!S.stroke || !S.cont || S.cont.ys.length < 8) {
-    S.cont = null;
-    S.phase = "continuation";
-    setHint("Draw a longer continuation — at least a dozen steps.");
-    invalidate();
-    return;
-  }
-  const rows = [];
-  const levels = [0.1, 0.25, 0.5, 0.75, 0.9];
-  const idx = [1, 2, 3, 4, 5];
-
-  for (const m of models) {
-    const f = S.fc[m.key];
-    if (!f) continue;
-    let n = 0, absErr = 0, inside = 0, pinball = 0;
-    for (let j = 0; j < S.cont.ys.length; j++) {
-      const k = S.cont.k0 + j;
-      const i = k - f.t0 - 1;
-      if (i < 0 || i >= f.q[0].length) continue;
-      const a = S.cont.ys[j];
-      n++;
-      absErr += Math.abs(a - f.q[3][i]);
-      if (a >= f.q[1][i] && a <= f.q[5][i]) inside++;
-      for (let z = 0; z < levels.length; z++) {
-        const p = f.q[idx[z]][i], tau = levels[z];
-        pinball += Math.max(tau * (a - p), (tau - 1) * (a - p));
-      }
-    }
-    if (n >= 8) {
-      rows.push({ key: m.key, name: m.name, color: m.color, n, mae: absErr / n, cov: inside / n, pinball: pinball / (n * levels.length) });
-    }
-  }
-
-  if (!rows.length) {
-    S.phase = "frozen";
-    setHint("No model covered that stretch. Draw the continuation from the end of the line.");
-    return;
-  }
-
-  rows.sort((a, b) => a.pinball - b.pinball);
-  S.phase = "scored";
-  S.round += 1;
-  setHint(HINT.testScored, true);
-  renderScores(rows);
-  saveSeason(rows);
-  updateMsLabels();
-  invalidate();
-  announce(`Scored. ${rows[0].name} had the best quantile score.`);
-}
-
-function renderScores(rows) {
-  const best = rows[0];
-  scoreRows.innerHTML = "";
-  rows.forEach((r, i) => {
-    const row = document.createElement("div");
-    row.className = "srow" + (i === 0 ? " win" : "");
-    row.innerHTML =
-      `<span class="rank">${i + 1}</span>` +
-      `<span><span class="sname"><span class="dot" style="--c:${r.color}"></span>${r.name}` +
-      `${i === 0 ? '<span class="best">best</span>' : ""}</span>` +
-      `<span class="smetrics">${(r.mae * 100).toFixed(1)}% miss · ${Math.round(r.cov * 100)}% in band</span></span>` +
-      `<span class="sscore">${(r.pinball * 100).toFixed(1)}<small>score</small></span>`;
-    scoreRows.appendChild(row);
-  });
-  scorePanel.classList.remove("hidden");
-  legendPanel.classList.add("hidden");
-  document.getElementById("round").textContent = `test ${S.round}`;
-}
-
-function readSeason() {
-  try { return JSON.parse(localStorage.getItem("lineup-season") || "{}"); } catch (e) { return {}; }
-}
-
-function saveSeason(rows) {
-  const store = readSeason();
-  rows.forEach((r, i) => {
-    const s = store[r.key] || { rounds: 0, pinball: 0, wins: 0 };
-    s.rounds += 1;
-    s.pinball += r.pinball;
-    s.wins += i === 0 ? 1 : 0;
-    store[r.key] = s;
-  });
-  try { localStorage.setItem("lineup-season", JSON.stringify(store)); } catch (e) {}
-  const total = Math.max(...Object.values(store).map((s) => s.rounds), 0);
-  const ranked = Object.entries(store).sort((a, b) => b[1].wins - a[1].wins || a[1].pinball / a[1].rounds - b[1].pinball / b[1].rounds);
-  if (!ranked.length) { seasonEl.textContent = ""; return; }
-  const [key, s] = ranked[0];
-  const name = (modelOf(key) || { name: key }).name;
-  seasonEl.innerHTML = total > 1
-    ? `Across <b>${total}</b> tests in this browser, <b>${name}</b> leads with ${s.wins} win${s.wins === 1 ? "" : "s"} (${((s.pinball / s.rounds) * 100).toFixed(1)} avg score).`
-    : "Scores stay in this browser. Draw more tests to build a season.";
-}
-
-document.getElementById("again").addEventListener("click", () => {
-  S.stroke = S.cont = null;
-  S.fc = {};
-  S.sent.clear();
-  S.phase = "idle";
-  touched = true;
-  hideScores();
-  setHint(HINT.testCtx);
-  invalidate();
-});
 
 // ------------------------------------------------------------------ view controls
 function setView(view) {
@@ -1013,22 +745,16 @@ for (const b of document.querySelectorAll(".seg button")) {
   b.addEventListener("click", () => setView(b.dataset.view));
 }
 
-bandsBtn.addEventListener("click", () => {
-  S.bands = !S.bands;
-  bandsBtn.setAttribute("aria-pressed", String(S.bands));
-  invalidate();
-});
-
 for (const b of document.querySelectorAll("[data-preset]")) {
   b.addEventListener("click", () => {
-    if (S.mode === "test") exitTest();
     touched = true;
     example = null;
+    S.generation += 1;
     S.stroke = presetStroke(b.dataset.preset);
-    S.cont = null;
     S.fc = {};
+    S.errors = {};
     S.sent.clear();
-    hideScores();
+    S.lastSeq = {};
     setHint("A synthetic line, to compare the models on something repeatable.");
     requestForecast(true);
     invalidate();
@@ -1039,14 +765,17 @@ for (const b of document.querySelectorAll("[data-preset]")) {
 addEventListener("keydown", (e) => {
   if (e.metaKey || e.ctrlKey || e.altKey) return;
   const k = e.key.toLowerCase();
-  if (k === "b") { bandsBtn.click(); return; }
   if (k === "g") { setView(S.view === "overlay" ? "lanes" : "overlay"); return; }
-  if (k === "t") { testBtn.click(); return; }
   if (k === "escape") {
-    if (S.mode === "test") exitTest(); else {
-      S.stroke = S.cont = null; S.fc = {}; S.sent.clear(); S.phase = "idle";
-      hideScores(); setHint(HINT.draw); invalidate();
-    }
+    S.stroke = null;
+    S.fc = {};
+    S.errors = {};
+    S.sent.clear();
+    S.lastSeq = {};
+    S.generation += 1;
+    setHint(HINT.draw);
+    scheduleExample();
+    invalidate();
     return;
   }
   if (k === "r") {
@@ -1062,9 +791,7 @@ addEventListener("keydown", (e) => {
 
 // ------------------------------------------------------------------ resize & boot
 function relayoutStrokes() {
-  for (const s of [S.stroke, S.cont]) {
-    if (s) s.raw = s.ys.map((v, i) => [xOf(s.k0 + i), yOf(v)]);
-  }
+  if (S.stroke) S.stroke.raw = S.stroke.ys.map((v, i) => [xOf(S.stroke.k0 + i), yOf(v)]);
   if (example) example.stroke.raw = example.stroke.ys.map((v, i) => [xOf(example.stroke.k0 + i), yOf(v)]);
 }
 
