@@ -130,7 +130,7 @@ Routes:
 
 - `GET /` and `/static/...` serve the canvas.
 - `GET /api/models` reports per-model `idle`/`loading`/`ready`/`error` status, load time,
-  native limits and the latest error.
+  native limits, parameter count and the latest error.
 - `POST /api/models/{key}/load` starts one lazy background load; a failed model can be
   retried without affecting the other model.
 - `POST /api/forecast` and `/ws` accept `y`, `h` and selected model keys. Both return one
@@ -143,6 +143,17 @@ selected ready models (64 with Chronos-Bolt). The server rejects over-limit hori
 of clipping them. Responses and errors are matched by stroke id, monotonically increasing
 sequence and UI generation, so presets, toggles and new drawings cannot apply stale values.
 Load failures remain visible as row/status errors; there is no synthetic fallback.
+
+The rail shows the actual original sample count and each selected model's actual median
+length; differing horizons are shown per model instead of being collapsed. The **Copy
+image** button writes a PNG to the browser clipboard from a user click. The PNG crops away
+the header and sidebar, includes the currently visible overlay or lanes graph, and adds a
+small footer legend below it: the original black line with its point count, then only the
+selected ready model curves with model/checkpoint name, parameter count from the example
+catalog (Chronos-Bolt Tiny 9M, Timestral 5M) and actual forecast-point count. Disabled or
+failed models are not added to the legend. Copy waits for fonts and settled forecast values,
+does not force a download on normal clipboard success, and offers an explicit download
+fallback if the clipboard API is unavailable or permission is denied.
 
 ## Later work
 

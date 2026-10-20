@@ -379,3 +379,74 @@ preset with only Timestral at horizon 75, with no JavaScript errors. Screenshots
 The demo process was restarted on the same free port after the fixes: PID `21512`, URL
 <http://127.0.0.1:8010/>, log `/tmp/forecasters-lineup.log`. A smoke check reported both
 models `ready` (Chronos-Bolt max horizon 64, Timestral max horizon 1024).
+
+## Copy image and point counts — 2026-10-20
+
+This is a small example/UI increment. No core adapter behavior or ADR decision changed.
+The server catalog now carries `parameter_count` for each example model: Chronos-Bolt Tiny
+9,000,000 and Timestral 5M 5,000,000. The UI reads this metadata from `GET /api/models`
+rather than duplicating counts in JavaScript.
+
+### Implemented surface
+
+- The rail displays the actual original sample count and the actual median length returned
+  by each selected ready model. Different horizons are displayed per model, and a ready
+  model with no answer is shown as `waiting` or `no result` instead of borrowing another
+  model's count.
+- Counts update on previews, drawing, presets, model toggles, errors and resets; clearing a
+  stroke clears its counts rather than leaving the previous stroke's numbers.
+- A **Copy image** button writes a PNG to the clipboard from a user click. The export crops
+  the current graph to the plotted area, excludes the header/sidebar, adds the paper
+  background and a footer legend below the graph.
+- The legend contains the original black line with its point count and only selected ready
+  forecasts that are actually visible, with model/checkpoint name, catalog parameter count
+  and actual forecast-point count. Errors and disabled models are omitted.
+- Export waits for `document.fonts.ready` and for tweening to settle before cropping, so a
+  transient interpolation does not replace the final numeric median.
+- Normal clipboard success does not download a file. If the Clipboard API is unavailable or
+  permission is denied, the button changes to an explicit `Download` fallback with visible
+  feedback; model-row errors are not cleared.
+
+### Browser checks
+
+Temporary Playwright checks at `/tmp/forecasters_copy_check.cjs` used the bundled
+Chromium/headless-shell path and granted clipboard permissions for
+`http://127.0.0.1:8010`. No browser test framework or dependency was added to the repository.
+
+Observed at a 390 px viewport:
+
+- Initial counts: `Original 69 points · Predicted: Chronos-Bolt 64 points · Timestral 64 points`.
+- Clipboard write produced a valid 382 × 600 PNG. The footer visually shows the black
+  original line with 69 points, Chronos-Bolt Tiny with 9M parameters and 64 forecast points,
+  and Timestral 5M with 5M parameters and 64 forecast points.
+- Manual drawing produced `Original 78 points` and 64 forecast points per model.
+- Turning Chronos-Bolt off left exactly one selected model and the honest count
+  `Original 78 points · Predicted: 66 points`; the exported Lanes PNG contained only the
+  original line and Timestral 5M legend entry.
+- The copy control did not overlap the hint at 390 px or desktop width; counts remained
+  visible in the rail.
+- Denied clipboard permission and an unavailable Clipboard API both produced the explicit
+  `Download` feedback with the corresponding tooltip. No page JavaScript errors occurred.
+
+The demo server was restarted after the catalog metadata change: PID `23659`, URL
+<http://127.0.0.1:8010/>, log `/tmp/forecasters-lineup.log`. Both cached checkpoints report
+`ready`; catalog parameter counts are present.
+
+### Commands
+
+```text
+$ .venv/bin/python -m pytest -o addopts='' -q tests/test_demo_server.py
+28 passed
+
+$ HF_HUB_OFFLINE=1 FORECASTERS_NATIVE=1 .venv/bin/python -m pytest -o addopts='' -q tests/test_demo_native_smoke.py
+1 passed
+
+$ .venv/bin/mypy examples/lineup/server.py tests/test_demo_server.py tests/test_demo_native_smoke.py
+Success: no issues found in 3 source files
+
+$ node --check examples/lineup/static/app.js
+# passed
+```
+
+The full-suite counts and native library behavior are unchanged from the review-correction
+section above; this increment did not alter core inference.
