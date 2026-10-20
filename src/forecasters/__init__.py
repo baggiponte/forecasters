@@ -1,8 +1,13 @@
-"""forecasters — a thin adapter layer over pretrained time-series foundation models.
+"""Thin adapters over native SDKs for pretrained time-series foundation models.
 
-The public API is defined in ``CONTRACT.md`` and is not implemented yet. This package currently exists so the
-project can be installed and the design can be versioned; 0.1.0 will add ``load``, ``Forecaster``,
-``Forecast`` and the first adapters.
+Importing :mod:`forecasters` does not import PyTorch or either native SDK. Load a concrete
+adapter with ``ChronosBolt.from_pretrained(...)`` or ``Timestral.from_pretrained(...)``.
 """
 
+from ._forecaster import Forecaster
+from .chronos_bolt import ChronosBolt
+from .timestral import Timestral
+
 __version__ = "0.1.0"
+
+__all__ = ["ChronosBolt", "Forecaster", "Timestral", "__version__"]

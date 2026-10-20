@@ -1,87 +1,108 @@
 # forecasters
 
-A thin, model-agnostic adapter layer over pretrained time-series foundation models.
+A minimal Python interface over native SDKs for pretrained time-series foundation models.
 
-Status: **design phase** (contract v0.2 under review). The implementation follows
-[`CONTRACT.md`](CONTRACT.md). The PyPI name `forecasters` is reserved, but the current 0.0.1 release is a
-placeholder; 0.1.0 will be the first real release.
+**Status: first library milestone implemented and validated on two tiny checkpoints.** The
+package exposes two concrete adapters, `ChronosBolt` and `Timestral`, plus one small
+structural `Forecaster` protocol. There is still no server, CLI, training support, sample
+generation, model registry or frontend implementation.
 
-## What it is
-
-`forecasters` does not implement forecasting. Each adapter calls one model's native SDK and returns that SDK's
-own point forecast and quantiles. The library provides:
-
-- a small, uniform `fit` / `predict` / `predict_proba` surface;
-- one worker process per model, so conflicting torch/transformers pins can coexist;
-- a `Forecast` value object carrying native levels and values;
-- capability checks and a small error taxonomy.
-
-It is **not** a modelling framework. No training, scaling, imputation, multivariate/exogenous plumbing,
-interpolation between quantile levels, or quantile-crossing repair.
+## Implemented API
 
 ```python
-from forecasters import load
+import numpy as np
+from forecasters import ChronosBolt, Timestral
 
-with load("chronos_bolt", python=".venvs/chronos/bin/python") as f:
-    f.fit(y)                    # capture context; load the native model once
-    point = f.predict(24)             # native point forecast, (24,)
-    q = f.predict_quantiles(24)       # native quantile levels (canonical)
-    lo, hi = q.interval(0.8)          # only when 0.1 and 0.9 are native
-    same = f.predict_proba(24)        # product-requested alias of predict_quantiles
+model = ChronosBolt.from_pretrained()       # amazon/chronos-bolt-tiny
+# model = Timestral.from_pretrained()       # mistralai/Timestral-5M
+
+context = np.sin(np.arange(64, dtype=np.float32) / 5.0)
+median = model.predict(context, horizon=8)                    # (8,)
+quantiles = model.predict(
+    context, horizon=8, quantile_levels=[0.9, 0.1, 0.5]
+)                                                              # (8, 3), request order
 ```
 
-`fit` is context capture, not training. The quantile method returns a `Forecast` carrying the model's native
-levels and values; it does not interpolate. `predict_proba` is the requested sklearn-flavoured alias of the
-canonical `predict_quantiles`.
+- `from_pretrained(...)` loads the checkpoint explicitly through the official SDK and
+  retains the loaded object for repeated predictions. Both adapters accept typed
+  `model_name`, `device`, `revision`, `cache_dir` and `local_files_only` parameters, with
+  defaults `amazon/chronos-bolt-tiny` and `mistralai/Timestral-5M`.
+- `predict(context, *, horizon, quantile_levels=None)` accepts only a one-dimensional,
+  nonempty, finite NumPy array or PyTorch tensor with a floating dtype. NumPy views
+  (including negative-stride and read-only views), float16, Torch bfloat16 and NumPy
+  `longdouble` are supported. Python sequences, integers, booleans, complex arrays and other
+  array libraries are rejected rather than coerced.
+- NumPy input returns NumPy values with the input floating dtype. Torch input returns a
+  tensor on the input device with the input floating dtype. Native compute device is
+  configured separately by `from_pretrained(device=...)`.
+- The default is the native 0.5 quantile with shape `(H,)`. Requested levels return
+  `(H, Q)` in caller order, including `(H, 1)` for one level; no median is inserted.
+- Quantiles are selected from the loaded checkpoint's native levels without interpolation
+  or nearby-level substitution. `supported_quantile_levels`, `max_context_length` and
+  `max_horizon` expose the loaded checkpoint's simple typed metadata.
+- Context and horizon values beyond the native limits raise before inference. The adapters
+  never truncate context or request SDK rollout beyond the native horizon.
+- Native results must have exactly Chronos `(1, Q, H)` or Timestral `(1, 1, H, Q)` shape
+  for the loaded quantile grid and requested horizon. Short, extra or unexpected dimensions
+  raise before selection. Selected values are checked for finiteness both natively and after
+  restoration; NaNs in known but unrequested quantile columns of a correct-shape result are
+  ignored. Invalid SDK shapes, selected NaNs and float16 overflow raise `RuntimeError`
+  instead of returning silently damaged forecasts.
 
-## Design
+`numpy` and the small standard `array-api-compat` package are the core dependencies. It is
+used for standard family recognition, floating-dtype/finiteness checks and device access; it
+does not make native model runtime portable. Adapter dependencies are separate:
+`forecasters[chronos]` and `forecasters[timestral]`. `import forecasters` does not import
+PyTorch or either native SDK. NumPy-only consumers can install the package without PyTorch.
 
-Read the contract first:
+## Verified behavior
 
-- [CONTRACT.md](CONTRACT.md) — public API, adapter contract, worker protocol, errors, non-goals.
-- [design/model-matrix.md](design/model-matrix.md) — native APIs of 15 foundation models.
-- [design/prior-art.md](design/prior-art.md) — sktime, Darts, GluonTS, NeuralForecast, Transformers, sklearn.
-- [design/edge-cases.md](design/edge-cases.md) — inputs, outputs, lifecycle, protocol, invariants, tests.
-- [design/opencode-review.md](design/opencode-review.md) and
-  [design/opencode-review-2.md](design/opencode-review-2.md),
-  [design/opencode-review-3.md](design/opencode-review-3.md) — external reviews and verification by Opus 5.5
-  via GitHub Copilot.
+Current evidence: **127 passed, 2 skipped** in the full development environment (skips are
+native-checkpoint tests), **129 passed** with `FORECASTERS_NATIVE=1`, and **24 passed, 105
+explicitly skipped** in a core-only environment without Torch or native SDKs. Mypy passes on
+the package and static consumer checks.
 
-## Reference app
+Dependency-light tests cover NumPy-only validation, negative-stride/read-only views, edge
+dtypes, invalid inputs and quantile requests. Native-boundary fake tests cover output
+family/dtype/device/shape, requested quantile order, limits, repeated calls without context
+leakage, empty Torch contexts, malformed native shapes, selected non-finite values,
+correct-shape unrequested quantile NaNs and post-restoration overflow. Real parity tests load both tiny checkpoints and compare the
+adapter's median and selected quantiles exactly against direct official-SDK calls on the same
+frozen context.
 
-The Line-up drawing app is the reference consumer: one canvas, several models, native intervals. It will be
-ported to `examples/lineup` after the 0.1 core and the first adapters land.
+Exact SDK versions, checkpoint revisions, hardware, test commands, Array API evaluation and
+measured load/warm timings are recorded in
+[implementation validation](design/implementation-validation.md). These are measured
+observations, not performance guarantees or benchmark claims.
+
+Not implemented in this milestone: training/fine-tuning, sample-based forecasts, batching,
+multivariate inputs, covariates, timestamps, missing-value policies, calibration, model
+selection, scikit-learn integration, serving, CLI and benchmarking infrastructure. The
+Chronos-Bolt SDK can roll beyond 64 steps and Timestral beyond one 1,024-step block, but the
+library deliberately rejects those requests instead of using rollout.
+
+## Design and evidence
+
+- [ADR index and review decisions](docs/adr/README.md)
+- [Implementation validation evidence](design/implementation-validation.md)
+- [Domain glossary](GLOSSARY.md)
+- [Repository and frontend audit](design/repository-audit.md)
+- [Updated foundation-model research](design/research-summary-2026-10-20.md)
+- [Interface options and scikit-learn trade-offs](design/interface-options.md)
+- [Earlier 15-model matrix](design/model-matrix.md) and [prior-art survey](design/prior-art.md), retained as research rather than implementation facts
+
+The [earlier external reviews](design/opencode-review.md), [second review](design/opencode-review-2.md) and [third review](design/opencode-review-3.md) assess the previous contract. The earlier [`CONTRACT.md`](CONTRACT.md) proposed a larger worker-based framework and remains historical, not binding.
+
+## Reference UI
 
 ![Line-up reference app](docs/overlay.png)
 
-## Planned adapters (0.1)
+The existing JavaScript canvas remains in [`examples/lineup/static`](examples/lineup/static), but its server is still missing. Connecting it is a later example step and is not part of the completed library milestone. The UI still needs transport and rendering changes, including removal of forecast-value smoothing and disabling unsupported probabilistic features.
 
-| Adapter | Native SDK | Notes |
-| --- | --- | --- |
-| `chronos_bolt` | `chronos-forecasting` | first reference adapter; CPU-friendly |
-| `timesfm25` | `timesfm[torch]` | compile-time horizon; no public device arg |
-| `moirai2` | `uni2ts` | 512-token context; CC-BY-NC-4.0 weights |
-| `toto` | `toto-ts` | sampled quantiles, needs a derived grid |
-| `timestral` | `timestral` (git) | 21 native levels |
-| `naive` | none | random-walk baseline for contract tests |
+## Later work
 
-Adapters are added only after the contract and worker protocol are settled. Each adapter must pass the
-conformance suite in `forecasters.testing`.
+1. Connect the canvas through a simple example server using the verified median API.
+2. Expand the model catalog only when a real consumer needs it.
+3. Study sample-based forecasts separately under ADR 0009.
 
-## Development plan
-
-1. Implement `Forecast`, `Capabilities`, the adapter ABC and the error taxonomy.
-2. Implement the worker protocol and supervisor (handshake, timeouts, cleanup, protocol fd).
-3. Implement `chronos_bolt` plus the `naive` test adapter and the conformance suite.
-4. Port the Line-up app as `examples/lineup` on top of the library; keep the UI.
-5. Add the remaining adapters behind optional extras/venvs; publish 0.1.0.
-
-## Development
-
-```bash
-uv venv
-uv pip install -e ".[dev]"
-pytest
-```
-
-No license file is included yet; add one before publishing.
+A license file is still needed before publishing.

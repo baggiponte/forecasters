@@ -8,7 +8,7 @@ version = "0.1.0"
 description = "A thin adapter layer over pretrained time-series foundation models"
 readme = "README.md"
 requires-python = ">=3.11"
-dependencies = ["numpy>=1.26"]
+dependencies = ["numpy>=1.26", "array-api-compat>=1.9,<2"]
 authors = [{ name = "baggiponte" }]
 keywords = ["time-series", "forecasting", "foundation-models", "quantiles"]
 classifiers = [
@@ -22,7 +22,17 @@ classifiers = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8.0"]
+chronos = ["chronos-forecasting>=2.3,<3"]
+timestral = [
+  "timestral @ git+https://github.com/mistralai/timestral.git@a534bdbd244d64f3d9d743f46c7bf6fc330ed4ff",
+]
+dev = ["pytest>=8.0", "mypy>=1.9"]
+
+[tool.hatch.build]
+exclude = [".venv", ".venvs", ".uvcache", ".hf-cache", ".cache", "dist", "build", ".pytest_cache", ".mypy_cache"]
+
+[tool.hatch.metadata]
+allow-direct-references = true
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/forecasters"]
@@ -30,3 +40,13 @@ packages = ["src/forecasters"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"
+markers = [
+  "native: requires downloaded native SDK checkpoints",
+  "backend: requires the optional PyTorch test backend",
+]
+
+[tool.mypy]
+python_version = "3.12"
+warn_unused_ignores = true
+check_untyped_defs = true
+ignore_missing_imports = true
