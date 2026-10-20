@@ -26,7 +26,8 @@ chronos = ["chronos-forecasting>=2.3,<3"]
 timestral = [
   "timestral @ git+https://github.com/mistralai/timestral.git@a534bdbd244d64f3d9d743f46c7bf6fc330ed4ff",
 ]
-dev = ["pytest>=8.0", "mypy>=1.9"]
+demo = ["fastapi>=0.115,<1", "uvicorn>=0.30,<1", "websockets>=12"]
+dev = ["pytest>=8.0", "mypy>=1.9", "httpx>=0.27", "websockets>=12"]
 
 [tool.hatch.build]
 exclude = [".venv", ".venvs", ".uvcache", ".hf-cache", ".cache", "dist", "build", ".pytest_cache", ".mypy_cache"]
