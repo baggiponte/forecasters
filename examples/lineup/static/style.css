@@ -122,8 +122,8 @@ button:focus-visible { outline: 2px solid #e8590c; outline-offset: 2px; }
 @keyframes pulse { 0%, 100% { opacity: .3; } 50% { opacity: 1; } }
 
 .counts {
-  margin-top: 10px; padding-top: 9px; border-top: 1px dashed var(--line);
-  font-size: 10.5px; line-height: 1.45; color: var(--ink-2);
+  margin-top: 9px; padding-top: 8px; border-top: 1px dashed var(--line);
+  font-size: 10px; line-height: 1.45; color: var(--muted);
   font-variant-numeric: tabular-nums; text-wrap: pretty;
 }
 
@@ -204,7 +204,7 @@ button:focus-visible { outline: 2px solid #e8590c; outline-offset: 2px; }
   .mname { font-size: 11px; }
   .mmeta { display: none; }
   .mms { font-size: 9px; width: 42px; white-space: nowrap; }
-  .counts { font-size: 9px; line-height: 1.35; margin-top: 6px; padding-top: 6px; }
+  .counts { font-size: 9px; line-height: 1.4; margin-top: 6px; padding-top: 6px; }
   .rail-foot { display: block; font-size: 9px; line-height: 1.4; margin-top: 6px; padding-top: 6px; }
   .bottom { right: 0; bottom: 190px; padding: 0 12px 8px; }
   .presets { display: none; }

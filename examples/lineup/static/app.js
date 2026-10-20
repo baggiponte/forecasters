@@ -311,16 +311,25 @@ function updateCounts() {
   if (S.noForecastSpace) {
     predicted = "Predicted: 0 points · leave room on the right";
   } else if (selected.length) {
-    const details = selected.map((m) => {
+    const lengths = selected.map((m) => {
       const f = graph.fc[m.key];
-      const value = f && Array.isArray(f.median)
-        ? `${f.median.length} points`
-        : (S.errors[m.key] ? "no result" : "waiting");
-      return selected.length === 1 ? value : `${m.name} ${value}`;
+      return f && Array.isArray(f.median) ? f.median.length : null;
     });
-    predicted = `Predicted: ${details.join(" · ")}`;
+    const complete = lengths.every((length) => length != null);
+    const shared = complete && lengths.every((length) => length === lengths[0]);
+    if (shared) {
+      predicted = `Predicted ${lengths[0]} point${lengths[0] === 1 ? "" : "s"}${selected.length > 1 ? " each" : ""}`;
+    } else {
+      const details = selected.map((m, i) => {
+        const value = lengths[i] != null
+          ? `${lengths[i]} pts`
+          : (S.errors[m.key] ? "no result" : "waiting");
+        return `${m.name} ${value}`;
+      });
+      predicted = `Predicted: ${details.join(" · ")}`;
+    }
   }
-  countsEl.textContent = `Original ${original} points · ${predicted}`;
+  countsEl.textContent = `Original ${original} point${original === 1 ? "" : "s"} · ${predicted}`;
   updateCopyAvailability();
 }
 
