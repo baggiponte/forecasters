@@ -489,3 +489,92 @@ preset (77/H64), Chronos-off Timestral (77/H75), correct visual legend and no Ja
 errors. Only `node --check` and the temporary browser checks were rerun for this UI-only
 correction; the demo server was not restarted because catalog and server metadata did not
 change. It remains on <http://127.0.0.1:8010/>.
+
+## Optional 80% native prediction intervals — 2026-10-20
+
+This is a small example/UI increment; no core adapter behavior or ADR decision changed. The
+median-only default remains compatible. The root owns the corresponding ADR 0004/0013 update.
+
+### Implemented surface
+
+- `POST /api/forecast` and `/ws` accept an optional strict boolean `include_interval`
+  (default `false`; non-boolean values are rejected). The default still returns only the
+  explicit `median` vector and calls `predict(context, horizon=...)` without quantile levels.
+- With `include_interval: true`, each selected model makes **one** `predict` call with exactly
+  `quantile_levels=[0.1, 0.5, 0.9]`. The top-level `median` and the nested
+  `interval: {levels, lower, upper}` are unpacked from that same native result. The server
+  first checks the loaded checkpoint's native grid; unsupported levels produce a visible
+  per-model error and no inference call.
+- No interpolation, mean substitution, fabricated bounds, crossing repair, clipping,
+  quantile-row expansion or sample options were added. Values are transported unchanged.
+- The UI adds a small **Bands 80%** toggle. It requests the interval over both preview HTTP
+  and drawing WebSocket paths, renders the lower-to-upper band beneath the median in both
+  Overlay and Lanes, and changes the toggle generation so older median-only or banded replies
+  cannot land after a switch. Turning it off removes stored bands immediately and the next
+  request is median-only.
+- The on-screen rail and exported PNG legend name the shaded region as the **80% prediction
+  interval** from native 0.1–0.9 quantiles. Copy image still exports the actual source canvas,
+  so the rendered bands are included, and the compact count summary is unchanged.
+- `tests/test_demo_server.py` covers HTTP/WebSocket interval parity, exact lower/median/upper
+  columns, strict boolean validation, unsupported native grids, and that the off path records
+  no quantile request. `tests/test_demo_native_smoke.py` now compares the HTTP/WS interval
+  columns exactly with both loaded real adapters' native `[0.1, 0.5, 0.9]` result.
+
+### Commands and observed results
+
+```text
+$ .venv/bin/python -m pytest -o addopts='' -q
+158 passed, 3 skipped
+
+$ HF_HUB_OFFLINE=1 FORECASTERS_NATIVE=1 .venv/bin/python -m pytest -o addopts='' -q
+161 passed
+
+$ .venv/bin/python -m mypy examples/lineup/server.py tests/test_demo_server.py tests/test_demo_native_smoke.py
+Success: no issues found in 3 source files
+
+$ node --check examples/lineup/static/app.js
+# passed
+
+$ git diff --check
+# passed
+```
+
+Both real checkpoints loaded from `.hf-cache` with `local_files_only=True`; the interval
+lower/median/upper columns matched the adapters' direct native quantile calls exactly. No
+weights were downloaded and no credentials were read.
+
+### Browser checks
+
+A temporary Playwright script at `/tmp/forecasters_bands_check.cjs` used the existing
+headless Chromium installation and added no browser dependency to the repository. At a
+1280×860 viewport it toggled **Bands 80%** on the idle example:
+
+- the preview request carried `include_interval: true` and both model responses carried
+  `levels: [0.1, 0.5, 0.9]`;
+- Overlay and Lanes rendered the bands, and the rail said
+  `Shaded bands show each model's 80% prediction interval from native 0.1–0.9 quantiles`;
+- the count summary stayed `Original 69 points · Predicted 64 points each`;
+- Copy image produced a valid PNG whose legend contained
+  `Central 80% prediction interval · native 0.1–0.9 quantiles`
+  (`/tmp/forecasters-bands-copy.png`, 73,820 bytes);
+- toggling off sent `include_interval: false`, returned no `interval` field, hid the note,
+  and left the graph median-only; the page reported no JavaScript errors.
+
+Screenshots: `/tmp/forecasters-bands-overlay.png`,
+`/tmp/forecasters-bands-lanes.png`, `/tmp/forecasters-bands-off.png`.
+
+### Live process
+
+The local demo was restarted on the existing URL <http://127.0.0.1:8010/> with
+`FORECASTERS_DEMO_CACHE=$PWD/.hf-cache` and `FORECASTERS_DEMO_LOCAL_ONLY=1`. New PID
+`32816`; log `/tmp/forecasters-intervals-server.log`. Both checkpoints reported `ready`
+(Chronos-Bolt max horizon 64, Timestral max horizon 1024).
+
+### Limitations
+
+- The band is a native quantile range, not calibrated coverage or a confidence claim. The UI
+  calls it a prediction interval but does not estimate empirical coverage.
+- The band is central 80% only; there is no arbitrary percentile control, interpolation,
+  median substitution or sample-based interval option.
+- The existing narrow-screen stylesheet still hides the Bands control on mobile; desktop and
+  the copy-image path were checked in this increment.

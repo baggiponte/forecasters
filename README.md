@@ -5,8 +5,9 @@ A minimal Python interface over native SDKs for pretrained time-series foundatio
 **Status: library and local canvas demo implemented and validated on two tiny checkpoints.**
 The package exposes two concrete adapters, `ChronosBolt` and `Timestral`, plus one small
 structural `Forecaster` protocol. A small FastAPI example under `examples/lineup` serves the
-existing Line-up canvas with the explicit median vector. There is still no deployment
-platform, CLI, training support, sample generation or model registry.
+existing Line-up canvas with the explicit median vector and an optional central 80% native
+prediction interval. There is still no deployment platform, CLI, training support, sample
+generation or model registry.
 
 ## Implemented API
 
@@ -60,9 +61,9 @@ consumers can install the package without PyTorch.
 
 ## Verified behavior
 
-Current evidence: **153 passed, 3 skipped** in the full development environment (skips are
-native-checkpoint tests), **156 passed** with `FORECASTERS_NATIVE=1`, and **22 passed, 107
-explicitly skipped** in a core-only environment without Torch, native SDKs or FastAPI. Mypy
+Current evidence: **158 passed, 3 skipped** in the full development environment (skips are
+native-checkpoint tests), and **161 passed** with `FORECASTERS_NATIVE=1`. Core-only collection
+also succeeds without Torch, native SDKs or FastAPI, with the optional tests skipped. Mypy
 passes on the package, static consumer checks, demo server and server test modules.
 
 Dependency-light tests cover NumPy-only validation, negative-stride/read-only views, edge
@@ -108,9 +109,10 @@ The [earlier external reviews](design/opencode-review.md), [second review](desig
 
 The canvas in [`examples/lineup/static`](examples/lineup/static) is now served by a small local
 FastAPI app in [`examples/lineup/server.py`](examples/lineup/server.py). It keeps the existing
-layout, manual pointer drawing, presets, model toggles and overlay/lanes views. The first UI
-shows only the median: forecast-value smoothing, bands and quantile/pinball scoring are
-removed.
+layout, manual pointer drawing, presets, model toggles and overlay/lanes views. The default
+UI shows the median; a **Bands 80%** toggle optionally adds each model's central native
+prediction interval. Forecast-value smoothing and quantile/pinball scoring remain out of the
+demo.
 
 Install the optional demo dependencies using the repository cache, then launch one process:
 
@@ -133,8 +135,12 @@ Routes:
   native limits, parameter count and the latest error.
 - `POST /api/models/{key}/load` starts one lazy background load; a failed model can be
   retried without affecting the other model.
-- `POST /api/forecast` and `/ws` accept `y`, `h` and selected model keys. Both return one
-  explicit `median` vector per ready model, never a fabricated or quantile-expanded result.
+- `POST /api/forecast` and `/ws` accept `y`, `h`, selected model keys and an optional strict
+  boolean `include_interval`. Every result keeps one explicit `median` vector. With
+  `include_interval: true`, each model makes one native quantile call for exactly
+  `[0.1, 0.5, 0.9]` and also returns `interval: {levels, lower, upper}` from that same
+  inference. Without it, no quantile levels are requested. There is no fabricated band,
+  interpolation, clipping or quantile-row expansion.
 - CPU loading and inference run outside the event loop. Inference is serialized, and the
   WebSocket keeps at most one in-flight request plus one latest pending drawing request.
 
