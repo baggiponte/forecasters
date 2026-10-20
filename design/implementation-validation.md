@@ -502,9 +502,9 @@ median-only default remains compatible. The root owns the corresponding ADR 0004
   explicit `median` vector and calls `predict(context, horizon=...)` without quantile levels.
 - With `include_interval: true`, each selected model makes **one** `predict` call with exactly
   `quantile_levels=[0.1, 0.5, 0.9]`. The top-level `median` and the nested
-  `interval: {levels, lower, upper}` are unpacked from that same native result. The server
-  first checks the loaded checkpoint's native grid; unsupported levels produce a visible
-  per-model error and no inference call.
+  `interval: {levels, lower, upper}` are unpacked from that same native result. The adapter
+  remains the single authority on native-grid validation; its `ValueError` is propagated as
+  a visible per-model error.
 - No interpolation, mean substitution, fabricated bounds, crossing repair, clipping,
   quantile-row expansion or sample options were added. Values are transported unchanged.
 - The UI adds a small **Bands 80%** toggle. It requests the interval over both preview HTTP
@@ -516,9 +516,9 @@ median-only default remains compatible. The root owns the corresponding ADR 0004
   interval** from native 0.1–0.9 quantiles. Copy image still exports the actual source canvas,
   so the rendered bands are included, and the compact count summary is unchanged.
 - `tests/test_demo_server.py` covers HTTP/WebSocket interval parity, exact lower/median/upper
-  columns, strict boolean validation, unsupported native grids, and that the off path records
-  no quantile request. `tests/test_demo_native_smoke.py` now compares the HTTP/WS interval
-  columns exactly with both loaded real adapters' native `[0.1, 0.5, 0.9]` result.
+  columns, strict boolean validation, adapter validation-error propagation, and that the off
+  path records no quantile request. `tests/test_demo_native_smoke.py` compares the HTTP/WS
+  interval columns exactly with both loaded real adapters' native `[0.1, 0.5, 0.9]` result.
 
 ### Commands and observed results
 
@@ -563,11 +563,51 @@ headless Chromium installation and added no browser dependency to the repository
 Screenshots: `/tmp/forecasters-bands-overlay.png`,
 `/tmp/forecasters-bands-lanes.png`, `/tmp/forecasters-bands-off.png`.
 
+### Supervisor review corrections
+
+The first real-browser review passed the desktop band behavior: both models returned 64-point
+bounds at `[0.1, 0.5, 0.9]`, turning the toggle off cleared intervals, and no JavaScript
+errors occurred. Two implementation corrections and one simplification followed:
+
+- The obsolete mobile `#bands { display: none; }` rule was removed. At 390 px the controls
+  wrap to two rows and stay clear of the hint/chart; at 320 px the same two-row layout fits.
+  Temporary Playwright checks confirmed the Bands control is visible, clickable and requests
+  the interval at both widths, with no control/hint overlap and no plot-area intrusion.
+- `intervalFrom` now checks the transmitted levels for the fixed UI sequence `[0.1, 0.5, 0.9]`,
+  not just that three finite values arrived. A temporary intercepted-response probe rewrote
+  both HTTP intervals to `[0.05, 0.5, 0.95]`; the UI rejected them as row errors with no
+  forecast and did not render a mislabeled 80% band. HTTP and WebSocket share this path.
+- Server-side native-grid matching was removed. The web layer no longer duplicates
+  `_has_native_level` or the native tolerance; `adapter.predict(..., quantile_levels=...)`
+  remains the only grid authority and its `ValueError` reaches the existing per-model error.
+  The transport test now uses a fake adapter that raises the realistic unsupported-level
+  `ValueError`, proving propagation rather than reimplementing matching in the server.
+
+```text
+$ .venv/bin/python -m pytest -o addopts='' -q tests/test_demo_server.py tests/test_demo_native_smoke.py
+33 passed, 1 skipped
+
+$ HF_HUB_OFFLINE=1 FORECASTERS_NATIVE=1 .venv/bin/python -m pytest -o addopts='' -q tests/test_demo_native_smoke.py
+1 passed
+
+$ .venv/bin/python -m mypy examples/lineup/server.py tests/test_demo_server.py tests/test_demo_native_smoke.py
+Success: no issues found in 3 source files
+
+$ node --check examples/lineup/static/app.js
+# passed
+
+$ git diff --check
+# passed
+```
+
+Temporary screenshots: `/tmp/forecasters-mobile-390-bands.png`,
+`/tmp/forecasters-mobile-320-bands.png`, `/tmp/forecasters-wrong-levels.png`.
+
 ### Live process
 
 The local demo was restarted on the existing URL <http://127.0.0.1:8010/> with
-`FORECASTERS_DEMO_CACHE=$PWD/.hf-cache` and `FORECASTERS_DEMO_LOCAL_ONLY=1`. New PID
-`32816`; log `/tmp/forecasters-intervals-server.log`. Both checkpoints reported `ready`
+`FORECASTERS_DEMO_CACHE=$PWD/.hf-cache` and `FORECASTERS_DEMO_LOCAL_ONLY=1`. Current PID
+`34010`; log `/tmp/forecasters-intervals-server.log`. Both checkpoints reported `ready`
 (Chronos-Bolt max horizon 64, Timestral max horizon 1024).
 
 ### Limitations
@@ -576,5 +616,3 @@ The local demo was restarted on the existing URL <http://127.0.0.1:8010/> with
   calls it a prediction interval but does not estimate empirical coverage.
 - The band is central 80% only; there is no arbitrary percentile control, interpolation,
   median substitution or sample-based interval option.
-- The existing narrow-screen stylesheet still hides the Bands control on mobile; desktop and
-  the copy-image path were checked in this increment.
