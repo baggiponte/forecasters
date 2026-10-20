@@ -67,6 +67,7 @@ class ModelSpec:
     note: str
     url: str
     default_on: bool
+    parameter_count: int
     factory: Callable[[], Forecaster]
 
 
@@ -125,6 +126,7 @@ def default_model_specs(settings: DemoSettings | None = None) -> list[ModelSpec]
             note="Chronos-Bolt tiny, native median on CPU.",
             url="https://github.com/amazon-science/chronos-forecasting",
             default_on=True,
+            parameter_count=9_000_000,
             factory=chronos,
         ),
         ModelSpec(
@@ -136,6 +138,7 @@ def default_model_specs(settings: DemoSettings | None = None) -> list[ModelSpec]
             note="Timestral 5M, native median on CPU.",
             url="https://github.com/mistralai/timestral",
             default_on=True,
+            parameter_count=5_000_000,
             factory=timestral,
         ),
     ]
@@ -169,6 +172,7 @@ class ModelManager:
                     "note": spec.note,
                     "url": spec.url,
                     "default_on": spec.default_on,
+                    "parameter_count": spec.parameter_count,
                     "status": runtime.status,
                     "load_ms": runtime.load_ms,
                     "error": runtime.error,

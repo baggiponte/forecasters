@@ -57,7 +57,9 @@ class Factory:
         return self.adapter
 
 
-def spec(key: str, factory: Factory, *, default_on: bool = False) -> ModelSpec:
+def spec(
+    key: str, factory: Factory, *, default_on: bool = False, parameter_count: int = 9_000_000
+) -> ModelSpec:
     return ModelSpec(
         key=key,
         name=key.title(),
@@ -67,6 +69,7 @@ def spec(key: str, factory: Factory, *, default_on: bool = False) -> ModelSpec:
         note="fake adapter",
         url="https://example.invalid",
         default_on=default_on,
+        parameter_count=parameter_count,
         factory=cast(Any, factory),
     )
 
@@ -97,7 +100,8 @@ def test_lazy_load_reuses_adapter_for_http_forecasts() -> None:
 
     with TestClient(app) as client:
         assert factory.calls == 0
-        load_and_wait(client, "fake")
+        loaded = load_and_wait(client, "fake")
+        assert loaded["parameter_count"] == 9_000_000
         assert factory.calls == 1
 
         first = client.post(
