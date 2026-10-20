@@ -1,5 +1,9 @@
 # Edge cases and invariants — the minimal `forecasters` contract
 
+> Historical design input. References to runtime types below do not imply those types exist in this repository.
+> This document predates the median-first [ADR proposals](../docs/adr/README.md); its worker and quantile
+> requirements are not requirements of that milestone.
+
 **Status:** design input; no implementation. Target API:
 
 ```python

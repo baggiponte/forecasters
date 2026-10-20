@@ -1,5 +1,10 @@
 # forecasters — minimal contract
 
+> Historical design proposal, retained for comparison. The 2026-10-20 product direction
+> reopens this contract's scope, point statistic, interface and mandatory worker design.
+> See [the proposed ADRs](docs/adr/README.md). The freeze and product overrides below
+> describe the previous proposal; they are not approval of the new direction or implemented behavior.
+
 **Version:** 0.3 (post second external review)  
 **Status:** sign-off candidate. Public API frozen after this revision; implementation follows.  
 **Product direction:** a sklearn-flavoured `fit` / `predict` / `predict_proba` surface over native

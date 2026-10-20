@@ -1,5 +1,9 @@
 # Native TSFM inference APIs — model matrix
 
+> Historical survey, not a verified implementation contract. The [updated bounded snapshot](research-summary-2026-10-20.md)
+> adds t0 and other families and corrects, among other details, Toto 2's current `toto-models` distribution name.
+> Check the linked current primary sources before using old versions, package names or limits below.
+
 Scope: what each pretrained time-series foundation model exposes through its **native** Python SDK, for a v0.1
 adapter that is univariate, context-in/quantiles-out, one model per worker. Compiled 2026-10-20 from model cards,
 package docs, and repo source; unverified points are marked **uncertain**. Nothing is inferred from the old
