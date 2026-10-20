@@ -1,0 +1,99 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    name: Pinned pre-commit checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884  # v10.3.0
+        with:
+          version: "0.13.4"
+          python-version: "3.12"
+          enable-cache: true
+
+      - name: Run the same checks as local pre-commit, plus full-history secret scanning
+        run: uvx --from prek==0.5.6 prek run --all-files --hook-stage manual --show-diff-on-failure
+
+  library:
+    name: Library tests and package artifacts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884  # v10.3.0
+        with:
+          version: "0.13.4"
+          python-version: "3.12"
+          enable-cache: true
+
+      - name: Install development environment
+        run: uv sync --locked --group dev
+
+      - name: Run library tests
+        run: uv run --package forecasters pytest
+
+      - name: Type-check the library
+        run: uv run --package forecasters mypy packages/forecasters/src packages/forecasters/tests/typing_consumer.py
+
+      - name: Build the public package
+        run: uv build --package forecasters --no-sources --out-dir dist/forecasters
+
+      - name: Inspect wheel and source distribution
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import tarfile
+          import zipfile
+
+          artifacts = Path("dist/forecasters")
+          wheels = list(artifacts.glob("forecasters-*.whl"))
+          sdists = list(artifacts.glob("forecasters-*.tar.gz"))
+          assert len(wheels) == 1, wheels
+          assert len(sdists) == 1, sdists
+
+          with zipfile.ZipFile(wheels[0]) as wheel:
+              names = set(wheel.namelist())
+          assert "forecasters/py.typed" in names, "py.typed missing from wheel"
+          assert not any(name.startswith(("forecasters_lineup", "apps/")) for name in names)
+
+          with tarfile.open(sdists[0]) as sdist:
+              names = set(sdist.getnames())
+          assert any(name.endswith("/src/forecasters/py.typed") for name in names), (
+              "py.typed missing from source distribution"
+          )
+          assert not any("/apps/" in name or "forecasters_lineup" in name for name in names)
+          print(f"validated {wheels[0].name} and {sdists[0].name}")
+          PY
+
+      - name: Install and test each artifact in an isolated environment
+        run: |
+          set -euo pipefail
+          for artifact in dist/forecasters/forecasters-*.whl dist/forecasters/forecasters-*.tar.gz; do
+            envdir="$(mktemp -d)"
+            uv venv --python 3.12 "$envdir"
+            uv pip install --python "$envdir/bin/python" "$artifact" pytest
+            "$envdir/bin/python" -c \
+              "import importlib.metadata as m; import importlib.resources as r; import forecasters; assert forecasters.__version__ == m.version('forecasters'); assert r.files('forecasters').joinpath('py.typed').is_file()"
+            "$envdir/bin/python" -m pytest -q \
+              packages/forecasters/tests/test_validation_numpy_only.py \
+              packages/forecasters/tests/test_lazy_imports.py
+          done
