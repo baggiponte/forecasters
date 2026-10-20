@@ -516,8 +516,9 @@ function handleMessage(m) {
 
 function intervalFrom(msg, length) {
   const interval = msg.interval;
-  if (!interval || !Array.isArray(interval.levels) || interval.levels.length !== 3) return null;
-  if (!interval.levels.every((v) => Number.isFinite(v))) return null;
+  const levels = [0.1, 0.5, 0.9];
+  if (!interval || !Array.isArray(interval.levels) || interval.levels.length !== levels.length) return null;
+  if (!interval.levels.every((v, i) => Number.isFinite(v) && Math.abs(v - levels[i]) < 1e-9)) return null;
   if (!Array.isArray(interval.lower) || interval.lower.length !== length) return null;
   if (!Array.isArray(interval.upper) || interval.upper.length !== length) return null;
   if (![...interval.lower, ...interval.upper].every((v) => Number.isFinite(v))) return null;

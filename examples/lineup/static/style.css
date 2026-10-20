@@ -192,9 +192,8 @@ button:focus-visible { outline: 2px solid #e8590c; outline-offset: 2px; }
   h1 { font-size: 23px; }
   .sub { display: none; }
   #hint { font-size: 12px; max-width: 58vw; margin-top: 6px; line-height: 1.4; }
-  .controls { gap: 4px; flex-wrap: nowrap; flex: none; }
+  .controls { gap: 4px; flex-wrap: wrap; max-width: 55vw; flex: none; }
   .seg button, .chip { font-size: 10.5px; padding: 6px 8px; }
-  #bands { display: none; }
   #hint { max-width: 32vw; }
   #rail {
     top: auto; bottom: 0; left: 0; right: 0; width: auto; height: 176px;
