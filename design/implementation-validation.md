@@ -202,3 +202,104 @@ tiny checkpoints load and run on this CPU; they are not latency guarantees.
 After DeepSeek completed the second review round, the supervisor independently reran the full offline native suite: **129 passed in 2.13 seconds**, including both real-checkpoint parity tests and accelerator device checks on this host. `mypy src tests/typing_consumer.py` passed for all eight checked source files; `git diff --check` passed. The fresh core-only installed wheel imported without loading Torch or either SDK, and both missing-SDK calls produced installation guidance. All ten ADR metadata records passed checks for status, ISO date, unique identifiers, valid replacement references and absence of replacement cycles.
 
 Review corrections covered negative-stride/read-only NumPy contexts, selected-value and post-cast finiteness, exact native shapes, empty Torch input and output typing. This accepts the first library milestone; the canvas/server integration remains pending.
+
+## Demo server and canvas integration — 2026-10-20
+
+This is a separate implementation increment; the library evidence above is unchanged. ADR
+0004 governed the transport. No ADR was edited.
+
+### Implemented surface
+
+- `examples/lineup/server.py`: one FastAPI app with `GET /`, `/static`, `GET /api/models`,
+  `POST /api/models/{key}/load`, `POST /api/forecast` and `/ws`. It lazily loads the two
+  adapters through `ChronosBolt.from_pretrained` and `Timestral.from_pretrained`, keeps the
+  loaded adapter objects for every later call, reports per-model `idle`/`loading`/`ready`/
+  `error` state and allows a failed load to be retried independently.
+- Model loading and prediction run through `asyncio.to_thread`; predictions share one
+  `asyncio.Lock`. The WebSocket has one worker task per connection with one in-flight
+  request and one latest pending request, so rapid drawing replaces an older pending
+  request instead of creating a task per pointer move.
+- HTTP and WebSocket transport carry an explicit `median` vector. There is no seven-row
+  duplicated quantile matrix. Requests reject non-list/empty/non-finite/non-numeric or
+  boolean sample values, non-integer or nonpositive horizons, horizons above the demo
+  bound, unknown/duplicate model keys, oversized contexts and oversized HTTP bodies.
+  Horizon checks against a loaded adapter's native `max_horizon` return a per-model error;
+  they never clip or shorten the response.
+- `examples/lineup/static/app.js` and `index.html`: removed forecast-value smoothing,
+  bands, test/pinball scoring, score history and their controls. Kept pointer drawing,
+  presets, model toggles, overlay/lanes layout, focus emphasis and stale-response guards by
+  stroke id, `seq` and an incrementing UI generation. The example and drawing requests use
+  `min(selected ready max_horizon)`, which is 64 with Chronos-Bolt.
+- `pyproject.toml`: `demo` extra with FastAPI, Uvicorn and WebSocket support; `dev` adds
+  `httpx` and `websockets` for transport tests.
+- `tests/test_demo_server.py`: fake-adapter tests for static routes, lazy loading, adapter
+  reuse, load failure/retry and isolation, native horizon errors, request validation, body
+  bounds, HTTP/WebSocket median parity and latest-drawing coalescing.
+- `tests/test_demo_native_smoke.py`: opt-in real-checkpoint HTTP/WebSocket smoke test. It
+  loads both checkpoints from `.hf-cache` with `local_files_only=True` and compares the
+  returned median exactly with the same loaded adapter's `predict` result.
+
+### Commands and observed results
+
+```text
+$ .venv/bin/python -m pytest -o addopts='' -q
+153 passed, 3 skipped
+
+$ HF_HUB_OFFLINE=1 FORECASTERS_NATIVE=1 .venv/bin/python -m pytest -o addopts='' -q
+156 passed
+
+$ .venvs/core-dev/bin/python -m pytest -o addopts='' -q
+24 passed, 107 skipped
+
+$ .venv/bin/mypy src tests/typing_consumer.py
+Success: no issues found in 8 source files
+
+$ .venv/bin/mypy examples/lineup/server.py tests/test_demo_server.py tests/test_demo_native_smoke.py
+Success: no issues found in 3 source files
+
+$ node --check examples/lineup/static/app.js
+# passed
+
+$ git diff --check
+# passed
+```
+
+The demo dependencies were installed into the existing `.venv` with
+`UV_CACHE_DIR="$PWD/.uvcache" uv pip install --python .venv/bin/python -e '.[demo,dev]'`.
+No weights were downloaded; the checks used the existing `.hf-cache`.
+
+### Live local launch and browser evidence
+
+Port 8000 was already occupied by unrelated static HTTP servers on this host, so the demo
+was run on a free port:
+
+```text
+$ FORECASTERS_DEMO_CACHE="$PWD/.hf-cache" FORECASTERS_DEMO_LOCAL_ONLY=1 \
+    .venv/bin/python -m uvicorn examples.lineup.server:app --host 127.0.0.1 --port 8010
+PID 20286; URL http://127.0.0.1:8010/; log /tmp/forecasters-lineup.log
+```
+
+Both default models reached `ready`: Chronos-Bolt tiny loaded in about 1.50 s with native
+`max_horizon` 64 and context 2,048; Timestral 5M loaded in about 0.61 s with native
+`max_horizon` 1,024 and context 32,768. A real HTTP request for a 48-value context and
+horizon 8 returned two finite 8-value medians (about 22.7 ms Chronos, 6.9 ms Timestral on
+that request). A WebSocket request returned `forecast` messages for both keys with the same
+length and `seq`.
+
+Headless Google Chrome loaded the page against the live server and, after the idle example
+completed, rendered `2 of 2 on`, both model rows as `ready`, and status `2 forecasts · 3–6 ms
+· all local`. This verifies the browser's catalog/example fetch path; the supervisor can
+draw manually in a visible browser as the final visual check.
+
+### Limitations
+
+- The demo is a single local process. It has no authentication, deployment platform,
+  multi-user fairness, model unloading, cross-process workers or generic scheduler.
+- The demo bounds requests at 2,048 context values, horizon 1,024, 8 selected models and a
+  256 KiB HTTP body. Model-native limits remain authoritative and are reported, not clipped.
+- Inference is serialized globally, including across HTTP and WebSocket callers. The
+  WebSocket coalescing is per connection.
+- The first UI intentionally exposes only the median. Quantiles remain a library feature;
+  bands, quantile scoring and sample-based forecasts are not implemented in this UI.
+- `FORECASTERS_DEMO_CACHE` is a demo convenience for the repository's existing cache layout.
+  When it is unset, standard Hugging Face `HF_HOME`/`HF_HUB_CACHE` resolution is used.
