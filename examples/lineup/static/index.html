@@ -6,50 +6,10 @@
 <title>Line-up — small time-series models finish your line</title>
 <meta name="description" content="Draw a line. Two small time-series foundation models forecast the median continuation on your CPU.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M1 11 Q4 4 7 9' fill='none' stroke='%2316181c' stroke-width='2'/%3E%3Cpath d='M7 9 L15 5' fill='none' stroke='%23e8590c' stroke-width='1.6'/%3E%3Cpath d='M7 9 L15 8' fill='none' stroke='%230b7285' stroke-width='1.6'/%3E%3Cpath d='M7 9 L15 11' fill='none' stroke='%236741d9' stroke-width='1.6'/%3E%3C/svg%3E">
-<link rel="stylesheet" href="/static/style.css?v=2">
+<link rel="stylesheet" href="/static/lineup.css?v=3">
 </head>
 <body>
-<canvas id="board" aria-label="Drawing area. Draw a line from left to right; each model's forecast appears to its right."></canvas>
-
-<header class="top">
-  <div class="intro">
-    <h1>Line-up</h1>
-    <p class="sub" id="sub">Small time-series foundation models.</p>
-    <p id="hint">Draw a line from left to right. The models forecast the rest.</p>
-  </div>
-  <div class="controls">
-    <div class="seg" role="group" aria-label="Layout">
-      <button type="button" data-view="overlay" aria-pressed="true">Overlay</button>
-      <button type="button" data-view="lanes" aria-pressed="false">Lanes</button>
-    </div>
-    <button type="button" id="bands" class="chip" aria-pressed="false" title="Show the central 80% native prediction interval">Bands 80%</button>
-    <button type="button" id="copy" class="chip" disabled title="Copy the graph and model legend as a PNG image">Copy image</button>
-  </div>
-</header>
-
-<aside id="rail">
-  <section id="legendPanel">
-    <div class="cap"><span>The line-up</span><span id="count">warming up</span></div>
-    <div id="rows" class="rows"></div>
-    <div id="counts" class="counts" aria-live="polite">Original — · Predicted —</div>
-    <p class="band-note hidden" id="bandNote">Shaded bands show each model's <b>80% prediction interval</b> from native 0.1–0.9 quantiles.</p>
-    <p class="rail-foot" id="railFoot">Zero-shot median on CPU. Click a model to load or switch it off.</p>
-  </section>
-
-</aside>
-
-<footer class="bottom">
-  <div class="presets">
-    <span class="plabel">Try</span>
-    <button type="button" data-preset="sine">sine</button>
-    <button type="button" data-preset="trend">trend</button>
-    <button type="button" data-preset="step">step</button>
-    <button type="button" data-preset="wiggle">wiggle</button>
-  </div>
-  <div id="status">warming up…</div>
-</footer>
-
-<div id="live" class="sr" aria-live="polite"></div>
-<script src="/static/app.js?v=2"></script>
+<div id="lineup-root"></div>
+<script type="module" src="/static/standalone.js?v=3"></script>
 </body>
 </html>

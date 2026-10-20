@@ -1,5 +1,3 @@
-"use strict";
-
 // ------------------------------------------------------------------ constants
 const STEPS = 160;          // one value per step across the screen
 const MIN_POINTS = 12;      // below this a forecast is mostly fan
@@ -15,26 +13,73 @@ const HINT = {
   draw: "Draw a line from left to right. The models forecast the rest.",
 };
 
-// ------------------------------------------------------------------ dom & state
-const canvas = document.getElementById("board");
-const ctx = canvas.getContext("2d");
-const hintEl = document.getElementById("hint");
-const statusEl = document.getElementById("status");
-const liveEl = document.getElementById("live");
-const rowsEl = document.getElementById("rows");
-const countEl = document.getElementById("count");
-const subEl = document.getElementById("sub");
-const railFoot = document.getElementById("railFoot");
-const countsEl = document.getElementById("counts");
-const bandsBtn = document.getElementById("bands");
-const bandNote = document.getElementById("bandNote");
-const copyBtn = document.getElementById("copy");
-const legendPanel = document.getElementById("legendPanel");
+const TEMPLATE = `
+<canvas data-role="board" aria-label="Drawing area. Draw a line from left to right; each model's forecast appears to its right."></canvas>
+<header class="top">
+  <div class="intro">
+    <h1>Line-up</h1>
+    <p class="sub" data-role="sub">Small time-series foundation models.</p>
+    <p data-role="hint">Draw a line from left to right. The models forecast the rest.</p>
+  </div>
+  <div class="controls">
+    <div class="seg" role="group" aria-label="Layout">
+      <button type="button" data-view="overlay" aria-pressed="true">Overlay</button>
+      <button type="button" data-view="lanes" aria-pressed="false">Lanes</button>
+    </div>
+    <button type="button" data-role="bands" class="chip" aria-pressed="false" title="Show the central 80% native prediction interval">Bands 80%</button>
+    <button type="button" data-role="copy" class="chip" disabled title="Copy the graph and model legend as a PNG image">Copy image</button>
+  </div>
+</header>
+<aside class="rail" data-role="rail">
+  <section data-role="legendPanel">
+    <div class="cap"><span>The line-up</span><span data-role="count">warming up</span></div>
+    <div data-role="rows" class="rows"></div>
+    <div data-role="counts" class="counts" aria-live="polite">Original — · Predicted —</div>
+    <p class="band-note hidden" data-role="bandNote">Shaded bands show each model's <b>80% prediction interval</b> from native 0.1–0.9 quantiles.</p>
+    <p class="rail-foot" data-role="railFoot">Zero-shot median on CPU. Click a model to load or switch it off.</p>
+  </section>
+</aside>
+<footer class="bottom">
+  <div class="presets">
+    <span class="plabel">Try</span>
+    <button type="button" data-preset="sine">sine</button>
+    <button type="button" data-preset="trend">trend</button>
+    <button type="button" data-preset="step">step</button>
+    <button type="button" data-preset="wiggle">wiggle</button>
+  </div>
+  <div data-role="status">warming up…</div>
+</footer>
+<div data-role="live" class="sr" aria-live="polite"></div>`;
 
+export function mountLineup(root, host) {
+  const controller = new AbortController();
+  const { signal } = controller;
+  let destroyed = false;
+
+  // ------------------------------------------------------------------ dom & state
+  root.classList.add("lineup-root");
+  if (host.page) root.classList.add("lineup-page");
+  root.tabIndex = 0;
+  root.innerHTML = TEMPLATE;
+  const q = (role) => root.querySelector(`[data-role="${role}"]`);
+  const canvas = q("board");
+  const ctx = canvas.getContext("2d");
+  const hintEl = q("hint");
+  const statusEl = q("status");
+  const liveEl = q("live");
+  const rowsEl = q("rows");
+  const countEl = q("count");
+  const subEl = q("sub");
+  const railFoot = q("railFoot");
+  const countsEl = q("counts");
+  const bandsBtn = q("bands");
+  const bandNote = q("bandNote");
+  const copyBtn = q("copy");
+  const legendPanel = q("legendPanel");
 let models = [];
 let W = 0, H = 0, dx = 1, railW = 300, raf = 0, touched = false;
 let plot = { x0: 0, x1: 0, y0: 0, y1: 0 };
-let example = null, ws = null, wsReady = false, reconnectTimer = 0, pollTimer = 0, exampleTimer = 0;
+let example = null, exampleTimer = 0;
 let strokeSeq = 0, copyBusy = false, copyFallback = false, copyResetTimer = 0;
 const COPY_TITLE = "Copy the graph and model legend as a PNG image";
 
@@ -52,6 +97,7 @@ const S = {
   seq: 0,
   generation: 0,          // invalidates replies from an older stroke/toggle/preset
   sent: new Map(),       // seq -> { id, t0, generation }
+  cancels: new Map(),    // seq -> host cancel/unsubscribe
   lastSend: 0,
   pointer: null,
   noForecastSpace: false,
@@ -97,7 +143,7 @@ function announce(text) {
 }
 
 function invalidate() {
-  if (!raf) raf = requestAnimationFrame(frame);
+  if (!destroyed && !raf) raf = requestAnimationFrame(frame);
 }
 
 function rng(seed) {
@@ -111,10 +157,11 @@ function rng(seed) {
 
 // ------------------------------------------------------------------ layout
 function layout() {
-  const mobile = innerWidth <= 760;
+  const mobile = root.clientWidth <= 760;
+  root.classList.toggle("narrow", mobile);
   railW = mobile ? 0 : 300;
   const dpr = Math.min(devicePixelRatio || 1, MAX_DPR);
-  W = innerWidth; H = innerHeight;
+  W = root.clientWidth; H = root.clientHeight;
   canvas.width = Math.round(W * dpr);
   canvas.height = Math.round(H * dpr);
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -187,42 +234,28 @@ function exampleStroke() {
 }
 
 // ------------------------------------------------------------------ model list
-async function loadModels() {
-  try {
-    const res = await fetch("/api/models", { cache: "no-store" });
-    if (!res.ok) throw new Error(res.status);
-    const data = await res.json();
-    models = data.models;
+function setModels(next) {
+  models = Array.isArray(next) ? next : [];
+  if (!S.initialized) {
+    S.initialized = true;
+    for (const m of models) if (!m.default_on) S.off.add(m.key);
+  }
+  updateChrome();
+  for (const m of models) {
+    if (m.status === "ready" && S.want.has(m.key)) {
+      S.want.delete(m.key);
+      S.off.delete(m.key);
+    }
+    if (m.status === "error" && S.want.has(m.key)) S.want.delete(m.key);
+  }
 
-    if (!S.initialized) {
-      S.initialized = true;
-      for (const m of models) if (!m.default_on) S.off.add(m.key);
-    }
-    updateChrome();
-    for (const m of models) {
-      if (m.status === "ready" && S.want.has(m.key)) {
-        S.want.delete(m.key);
-        S.off.delete(m.key);
-      }
-      if (m.status === "error" && S.want.has(m.key)) S.want.delete(m.key);
-    }
-
-    const sig = data.models.map((m) => `${m.key}:${m.status}:${Math.round((m.load_ms || 0) / 100) / 10}`).join("|");
-    if (sig !== S.modelSig) {
-      S.modelSig = sig;
-      buildRows();
-      updateCount();
-      scheduleExample();
-      if (S.stroke && touched) requestForecast(true);
-    }
-    if (data.models.some((m) => m.status === "loading") || S.want.size) {
-      clearTimeout(pollTimer);
-      pollTimer = setTimeout(loadModels, 900);
-    }
-  } catch (e) {
-    setStatus("Can't reach the server. Is it running?");
-    clearTimeout(pollTimer);
-    pollTimer = setTimeout(loadModels, 2500);
+  const sig = models.map((m) => `${m.key}:${m.status}:${Math.round((m.load_ms || 0) / 100) / 10}`).join("|");
+  if (sig !== S.modelSig) {
+    S.modelSig = sig;
+    buildRows();
+    updateCount();
+    scheduleExample();
+    if (S.stroke && touched) requestForecast(true);
   }
 }
 
@@ -253,9 +286,9 @@ function buildRows() {
       `<span class="mi"><span class="mname">${m.name}</span><span class="mmeta">${m.org} · ${m.variant}</span></span>` +
       `<span class="mms">${statusText(m)}</span>`;
     btn.title = `${m.note}\n${m.url}\n\n${m.status === "idle" ? "Click to load this model." : m.status === "error" ? m.error : statusText(m)}`;
-    btn.addEventListener("click", () => toggleModel(m.key));
-    btn.addEventListener("mouseenter", () => { S.focus = m.key; invalidate(); });
-    btn.addEventListener("mouseleave", () => { if (S.focus === m.key) { S.focus = null; invalidate(); } });
+    btn.addEventListener("click", () => toggleModel(m.key), { signal });
+    btn.addEventListener("mouseenter", () => { S.focus = m.key; invalidate(); }, { signal });
+    btn.addEventListener("mouseleave", () => { if (S.focus === m.key) { S.focus = null; invalidate(); } }, { signal });
     rowsEl.appendChild(btn);
   }
   updateMsLabels();
@@ -358,14 +391,10 @@ function loadModel(key) {
   S.want.add(key);
   delete S.errors[key];
   setStatus(`Loading ${m.name} (${m.variant})…`);
-  fetch(`/api/models/${key}/load`, { method: "POST" })
-    .then((r) => { if (!r.ok) throw new Error(r.status); })
-    .catch(() => {
-      S.want.delete(key);
-      setStatus(`Could not ask the server to load ${m.name}.`);
-    });
-  clearTimeout(pollTimer);
-  pollTimer = setTimeout(loadModels, 500);
+  Promise.resolve(host.loadModel ? host.loadModel(key) : undefined).catch(() => {
+    S.want.delete(key);
+    setStatus(`Could not ask the server to load ${m.name}.`);
+  });
   const row = rowsEl.querySelector(`[data-key="${key}"]`);
   if (row) {
     row.classList.remove("idle");
@@ -437,37 +466,7 @@ function alphaFor(key) {
   return S.focus === key ? 1 : 0.14;
 }
 
-// ------------------------------------------------------------------ websocket
-function connect() {
-  const proto = location.protocol === "https:" ? "wss" : "ws";
-  try {
-    ws = new WebSocket(`${proto}://${location.host}/ws`);
-  } catch (e) {
-    setStatus("Can't open a live connection.");
-    return;
-  }
-  ws.binaryType = "arraybuffer";
-  ws.onopen = () => {
-    wsReady = true;
-    setStatus("Connected. Forecasts stream in as each model finishes.");
-    updateBestStatus();
-    if (S.stroke) requestForecast(true);
-  };
-  ws.onclose = () => {
-    wsReady = false;
-    if (!reconnectTimer) reconnectTimer = setTimeout(() => { reconnectTimer = 0; connect(); }, 1200);
-    clearTimeout(pollTimer);
-    pollTimer = setTimeout(loadModels, 900);
-  };
-  ws.onerror = () => { try { ws.close(); } catch (e) {} };
-  ws.onmessage = (ev) => {
-    try {
-      const text = typeof ev.data === "string" ? ev.data : new TextDecoder().decode(ev.data);
-      handleMessage(JSON.parse(text));
-    } catch (e) {}
-  };
-}
-
+// ------------------------------------------------------------------ transport
 function validSent(m) {
   const sent = S.sent.get(m.seq);
   if (!sent) return null;
@@ -558,10 +557,18 @@ function updateBestStatus() {
   setStatus(`<b>${fs.length}</b> forecast${fs.length === 1 ? "" : "s"} · ${Math.round(fast)}–${Math.round(slow)} ms · all local`);
 }
 
+function cancelRequests() {
+  for (const cancel of S.cancels.values()) {
+    try { cancel(); } catch (e) {}
+  }
+  S.cancels.clear();
+  S.sent.clear();
+}
+
 function clearNoForecastSpace() {
   S.noForecastSpace = true;
   S.fc = {};
-  S.sent.clear();
+  cancelRequests();
   S.lastSeq = {};
   setHint("Leave room on the right for a forecast.");
   updateMsLabels();
@@ -578,23 +585,41 @@ function requestForecast(final = false) {
     return 0;
   }
   S.noForecastSpace = false;
-  if (!wsReady) return 0;
+  if (!final && !host.liveUpdates) return 0;
   const keys = visibleModels().map((m) => m.key);
   if (!keys.length) return 0;
   const now = performance.now();
   if (!final && now - S.lastSend < 85) return 0;
   S.lastSend = now;
   const seq = ++S.seq;
+  const requestId = `${Date.now().toString(36)}-${seq}-${Math.random().toString(36).slice(2, 8)}`;
   S.sent.set(seq, { id: s.id, t0, generation: S.generation });
-  for (const k of S.sent.keys()) { if (k < seq - 40) S.sent.delete(k); else break; }
-  ws.send(JSON.stringify({
+  for (const k of S.sent.keys()) {
+    if (k >= seq - 40) break;
+    const oldCancel = S.cancels.get(k);
+    if (oldCancel) {
+      try { oldCancel(); } catch (e) {}
+      S.cancels.delete(k);
+    }
+    S.sent.delete(k);
+  }
+  const cancel = host.request({
     type: "forecast",
     seq,
+    request_id: requestId,
     y: s.ys.slice(-MAX_CONTEXT),
     h,
     models: keys,
     include_interval: S.bands,
-  }));
+  }, {
+    onResult: (m) => handleMessage({ type: "forecast", seq, ...m }),
+    onError: (m) => handleMessage({ type: "error", seq, ...m }),
+  });
+  if (!cancel) {
+    S.sent.delete(seq);
+    return 0;
+  }
+  if (typeof cancel === "function") S.cancels.set(seq, cancel);
   return seq;
 }
 
@@ -608,7 +633,7 @@ function scheduleExample() {
     invalidate();
   }
   updateCounts();
-  exampleTimer = setTimeout(showExample, 250);
+  if (host.preview !== false) exampleTimer = setTimeout(showExample, 250);
 }
 
 function setPreviewError(keys, text) {
@@ -621,7 +646,7 @@ function setPreviewError(keys, text) {
 }
 
 async function showExample() {
-  if (touched || !plot.x1) return;
+  if (touched || !plot.x1 || host.preview === false || !host.preview) return;
   const stroke = exampleStroke();
   const target = { stroke, fc: {}, errors: {}, t0: tipK(stroke) };
   example = target;
@@ -632,17 +657,7 @@ async function showExample() {
   const h = Math.min(nativeHorizonCap(), STEPS - 1 - target.t0);
   if (h < 4) return;
   try {
-    const res = await fetch("/api/forecast", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ y: stroke.ys, h, models: ready, include_interval: S.bands }),
-    });
-    if (example !== target || touched) return;
-    if (!res.ok) {
-      setPreviewError(ready, `Example request failed (HTTP ${res.status})`);
-      return;
-    }
-    const data = await res.json();
+    const data = await host.preview({ y: stroke.ys, h, models: ready, include_interval: S.bands });
     if (example !== target || touched) return;
     for (const [key, msg] of Object.entries(data.results || {})) {
       if (!msg) {
@@ -690,6 +705,7 @@ async function showExample() {
 // ------------------------------------------------------------------ rendering
 function frame() {
   raf = 0;
+  if (destroyed) return;
   const now = performance.now();
   ctx.clearRect(0, 0, W, H);
   ctx.save();
@@ -1056,6 +1072,11 @@ async function copyGraphImage() {
 }
 
 // ------------------------------------------------------------------ input
+function localPoint(e) {
+  const rect = root.getBoundingClientRect();
+  return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+}
+
 function insidePlot(x, y) {
   return x >= plot.x0 - 8 && x <= plot.x1 + 8 && y >= plot.y0 - 8 && y <= plot.y1 + 8;
 }
@@ -1067,7 +1088,8 @@ function pointsOf(e) {
 
 canvas.addEventListener("pointerdown", (e) => {
   if (S.pointer !== null || !e.isPrimary || (e.pointerType === "mouse" && e.button !== 0)) return;
-  if (!insidePlot(e.clientX, e.clientY)) return;
+  const point = localPoint(e);
+  if (!insidePlot(point.x, point.y)) return;
 
   S.pointer = e.pointerId;
   try { canvas.setPointerCapture(e.pointerId); } catch (err) {}
@@ -1077,23 +1099,27 @@ canvas.addEventListener("pointerdown", (e) => {
   S.stroke = newStroke();
   S.fc = {};
   S.errors = {};
-  S.sent.clear();
+  cancelRequests();
   S.lastSeq = {};
   S.focus = null;
   S.noForecastSpace = false;
   setHint(HINT.draw);
-  addPoint(S.stroke, e.clientX, e.clientY);
+  root.focus({ preventScroll: true });
+  addPoint(S.stroke, point.x, point.y);
   updateCounts();
   invalidate();
-});
+}, { signal });
 
 canvas.addEventListener("pointermove", (e) => {
   if (e.pointerId !== S.pointer || !S.stroke) return;
-  for (const p of pointsOf(e)) addPoint(S.stroke, p.clientX, p.clientY);
+  for (const p of pointsOf(e)) {
+    const point = localPoint(p);
+    addPoint(S.stroke, point.x, point.y);
+  }
   requestForecast(false);
   updateCounts();
   invalidate();
-});
+}, { signal });
 
 function endStroke(e) {
   if (e.pointerId !== S.pointer) return;
@@ -1110,25 +1136,25 @@ function endStroke(e) {
   invalidate();
 }
 
-canvas.addEventListener("pointerup", endStroke);
-canvas.addEventListener("pointercancel", endStroke);
-canvas.addEventListener("lostpointercapture", endStroke);
+canvas.addEventListener("pointerup", endStroke, { signal });
+canvas.addEventListener("pointercancel", endStroke, { signal });
+canvas.addEventListener("lostpointercapture", endStroke, { signal });
 
 // ------------------------------------------------------------------ view controls
 function setView(view) {
   S.view = view;
-  for (const b of document.querySelectorAll(".seg button")) {
+  for (const b of root.querySelectorAll(".seg button")) {
     b.setAttribute("aria-pressed", String(b.dataset.view === view));
   }
   invalidate();
 }
-for (const b of document.querySelectorAll(".seg button")) {
-  b.addEventListener("click", () => setView(b.dataset.view));
+for (const b of root.querySelectorAll(".seg button")) {
+  b.addEventListener("click", () => setView(b.dataset.view), { signal });
 }
-copyBtn.addEventListener("click", copyGraphImage);
-bandsBtn.addEventListener("click", () => setBands(!S.bands));
+copyBtn.addEventListener("click", copyGraphImage, { signal });
+bandsBtn.addEventListener("click", () => setBands(!S.bands), { signal });
 
-for (const b of document.querySelectorAll("[data-preset]")) {
+for (const b of root.querySelectorAll("[data-preset]")) {
   b.addEventListener("click", () => {
     touched = true;
     example = null;
@@ -1136,18 +1162,18 @@ for (const b of document.querySelectorAll("[data-preset]")) {
     S.stroke = presetStroke(b.dataset.preset);
     S.fc = {};
     S.errors = {};
-    S.sent.clear();
+    cancelRequests();
     S.lastSeq = {};
     S.noForecastSpace = false;
     setHint("A synthetic line, to compare the models on something repeatable.");
     requestForecast(true);
     updateCounts();
     invalidate();
-  });
+  }, { signal });
 }
 
 // ------------------------------------------------------------------ keyboard
-addEventListener("keydown", (e) => {
+root.addEventListener("keydown", (e) => {
   if (e.metaKey || e.ctrlKey || e.altKey) return;
   const k = e.key.toLowerCase();
   if (k === "g") { setView(S.view === "overlay" ? "lanes" : "overlay"); return; }
@@ -1155,7 +1181,7 @@ addEventListener("keydown", (e) => {
     S.stroke = null;
     S.fc = {};
     S.errors = {};
-    S.sent.clear();
+    cancelRequests();
     S.lastSeq = {};
     S.noForecastSpace = false;
     S.generation += 1;
@@ -1166,14 +1192,14 @@ addEventListener("keydown", (e) => {
   }
   if (k === "r") {
     const keys = Object.keys(PRESETS);
-    document.querySelector(`[data-preset="${keys[Math.floor(Math.random() * keys.length)]}"]`)?.click();
+    root.querySelector(`[data-preset="${keys[Math.floor(Math.random() * keys.length)]}"]`)?.click();
     return;
   }
   if (k >= "1" && k <= "5") {
     const m = models[Number(k) - 1];
     if (m) toggleModel(m.key);
   }
-});
+}, { signal });
 
 // ------------------------------------------------------------------ resize & boot
 function relayoutStrokes() {
@@ -1189,23 +1215,48 @@ function onResize() {
   invalidate();
 }
 
-let resizeTimer = 0;
-addEventListener("resize", () => {
-  clearTimeout(resizeTimer);
-  resizeTimer = setTimeout(onResize, 90);
-});
-if (window.ResizeObserver) {
-  new ResizeObserver(() => {
-    if (innerWidth !== W || innerHeight !== H) onResize();
-  }).observe(canvas);
+let resizeObserver = null;
+if (typeof ResizeObserver !== "undefined") {
+  resizeObserver = new ResizeObserver(() => {
+    if (root.clientWidth !== W || root.clientHeight !== H) onResize();
+  });
+  resizeObserver.observe(root);
 }
 
 layout();
 updateBandChrome();
-const hashPreset = location.hash.replace("#", "");
-if (PRESETS[hashPreset]) setTimeout(() => document.querySelector(`[data-preset="${hashPreset}"]`)?.click(), 60);
-connect();
-loadModels();
-showExample();
+setModels(host.models || []);
+if (host.useHash) {
+  const hashPreset = location.hash.replace("#", "");
+  if (PRESETS[hashPreset]) {
+    setTimeout(() => {
+      if (!destroyed) root.querySelector(`[data-preset="${hashPreset}"]`)?.click();
+    }, 60);
+  }
+}
+scheduleExample();
 document.fonts.ready.then(invalidate);
-setTimeout(() => { if (!models.length) loadModels(); }, 1500);
+
+return {
+  destroy() {
+    if (destroyed) return;
+    destroyed = true;
+    controller.abort();
+    if (resizeObserver) resizeObserver.disconnect();
+    clearTimeout(exampleTimer);
+    clearTimeout(copyResetTimer);
+    if (raf) cancelAnimationFrame(raf);
+    raf = 0;
+    for (const cancel of S.cancels.values()) {
+      try { cancel(); } catch (e) {}
+    }
+    S.cancels.clear();
+    S.sent.clear();
+    if (host.destroy) host.destroy();
+  },
+  setModels,
+  setStatus,
+  setHint,
+  requestForecast,
+};
+}
