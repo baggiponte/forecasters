@@ -17,7 +17,8 @@ import pytest
 pytest.importorskip("fastapi")
 from fastapi.testclient import TestClient
 
-from examples.lineup.server import DemoSettings, create_app, default_model_specs
+from examples.lineup.engine import DemoSettings, default_model_specs
+from examples.lineup.server import create_app
 
 pytestmark = [
     pytest.mark.native,
