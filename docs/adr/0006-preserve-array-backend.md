@@ -4,18 +4,16 @@ status: accepted
 date: "2026-10-20"
 ---
 
-# Preserve the caller's NumPy or PyTorch array family
+# Accept NumPy arrays and Torch tensors and preserve their representation
 
-The user's corrected rule applies to the actual return value: `context` accepts only a NumPy array or a PyTorch tensor. NumPy input returns a NumPy array and PyTorch input returns a PyTorch tensor. Python lists, tuples and other Python sequences are not supported context inputs. `Sequence[float]` describes only the optional quantile levels in ADR 0007. Point forecasts and requested quantiles use the same array-family rule. Native SDK representation is an adapter detail.
+Within [ADR 0001](0001-median-first-native-sdk-scope.md)'s one-dimensional, nonempty, finite scope, `context` accepts only an ordinary `numpy.ndarray` or `torch.Tensor`. Python lists, tuples and other array libraries are rejected before any coercion. `Sequence[float]` applies only to optional quantile levels under [ADR 0007](0007-request-only-supported-quantiles.md).
 
-Use explicit typed overloads: NumPy input returns NumPy and tensor input returns tensor. Do not annotate `context` with `ArrayLike` or a Python `Sequence`, which would advertise unsupported inputs. Validate the input type before any coercion; do not silently accept a list by passing it to `asarray` or `as_tensor`. Static checking should preserve the relationship rather than returning an unconstrained NumPy-or-Torch union. Keep PyTorch optional for NumPy-only consumers. The contract concerns ordinary `numpy.ndarray` and `torch.Tensor` values, not arbitrary subclass preservation.
+NumPy input returns a NumPy array; Torch input returns a Torch tensor. Preserve the input's floating dtype, and return Torch results on the input tensor's device. Explicit typed overloads preserve this relationship. Reject integer, boolean and complex arrays or tensors with a clear `TypeError` before inference; callers convert explicitly if that is what they want. PyTorch remains optional for NumPy-only consumers.
 
-**Accepted dtype policy:** preserve floating input dtype for NumPy arrays and PyTorch tensors. The form's earlier rule for Python sequences is withdrawn by the user's input-type correction. Native computation can use a different dtype; casting the result back does not recover precision lost during inference.
+Return one array or tensor directly, never a result object or a tuple containing point and quantile fields. The same family, dtype and device rules apply to the default point forecast and to requested quantiles. Return shape is owned by [ADR 0007](0007-request-only-supported-quantiles.md) and does not add batching or multivariate support.
 
-**Supervisor implementation policy:** accept floating context arrays/tensors only in this milestone. Reject integer, boolean and complex dtypes with a clear `TypeError` before inference, explaining that floating input is required. This resolves the previously unspecified integer case without silently casting inputs or returning integer forecasts. It is a conservative implementation choice made under the user's instruction to supervise implementation, not a claim that the earlier float32 conversion suggestion was accepted.
+This contract concerns ordinary NumPy arrays and Torch tensors, not arbitrary subclasses. It does not promise preservation of a literal subclass. Recognizing additional Array API namespaces for internal interoperability does not make them public context types; [ADR 0010](0010-standard-array-api-helpers.md) owns that boundary.
 
-**Accepted device policy:** return PyTorch results on the input tensor's device. Native model compute device is configured separately and may require transfers. This does not imply zero-copy execution or autograd support.
+Native computation may use another dtype or device; casting the result back restores representation, not precision already lost during inference. No zero-copy or autograd behaviour is promised.
 
-Return one n-dimensional array/tensor directly, never a result object or tuple containing point and quantile fields. The user explicitly resolved this distinction after the earlier t0-style container question. Return shape is separate from return type: it depends on whether quantiles were requested and on the supported forecasting dimensions. This decision does not by itself add batching or multivariate support to the first milestone.
-
-This replaces ADR 0002's NumPy-only, fixed-float64 return assumption. It adds no inference implementation or public dependency on a shared model framework.
+**Decision provenance:** the user accepted floating dtype preservation and returning Torch results on the input tensor's device. The supervisor chose floating-only contexts with explicit rejection of other dtypes rather than silent conversion. Historical form answers and corrections are in the [submitted decision review](../../design/decision-review-2026-10-20.md).
