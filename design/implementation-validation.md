@@ -249,7 +249,7 @@ $ HF_HUB_OFFLINE=1 FORECASTERS_NATIVE=1 .venv/bin/python -m pytest -o addopts=''
 156 passed
 
 $ .venvs/core-dev/bin/python -m pytest -o addopts='' -q
-24 passed, 107 skipped
+22 passed, 107 skipped
 
 $ .venv/bin/mypy src tests/typing_consumer.py
 Success: no issues found in 8 source files
@@ -276,7 +276,7 @@ was run on a free port:
 ```text
 $ FORECASTERS_DEMO_CACHE="$PWD/.hf-cache" FORECASTERS_DEMO_LOCAL_ONLY=1 \
     .venv/bin/python -m uvicorn examples.lineup.server:app --host 127.0.0.1 --port 8010
-PID 20286; URL http://127.0.0.1:8010/; log /tmp/forecasters-lineup.log
+PID 20286 (superseded by the post-review restart below); URL http://127.0.0.1:8010/; log /tmp/forecasters-lineup.log
 ```
 
 Both default models reached `ready`: Chronos-Bolt tiny loaded in about 1.50 s with native
@@ -303,3 +303,79 @@ draw manually in a visible browser as the final visual check.
   bands, quantile scoring and sample-based forecasts are not implemented in this UI.
 - `FORECASTERS_DEMO_CACHE` is a demo convenience for the repository's existing cache layout.
   When it is unset, standard Hugging Face `HF_HOME`/`HF_HUB_CACHE` resolution is used.
+
+## Review corrections — 2026-10-20
+
+The supervisor review reproduced a cancellation bug and requested a small set of targeted
+fixes. No ADR decision was edited by implementation; the existing supervisor-authored ADR
+0004 clarification is committed exactly as provided.
+
+### Fixes
+
+- Cancellation now cannot release the inference lock while a native thread is still running.
+  `ModelManager.predict` shields the `asyncio.to_thread` task, waits for it to finish after
+  cancellation, and only then leaves the lock. A canceled WebSocket caller therefore cannot
+  overlap a second caller's native inference.
+- WebSocket errors now use the same stroke/generation/sequence guard as successful
+  forecasts. A newer error updates the model's sequence, stores a persistent row error and
+  clears that model's old curve. Older successes or errors cannot overwrite it. A successful
+  result for another model leaves the failed model's row error visible.
+- Preview HTTP results now expose per-model errors instead of silently skipping them.
+  Selection changes immediately null the current example target before scheduling a new
+  preview, so an in-flight response for the old selection is ignored.
+- `_parse_context` converts huge JSON integers inside the request-validation path; overflow
+  is now a `RequestError`/HTTP 400 rather than an uncaught 500.
+
+### Test review
+
+Two private NumPy helper tests were removed because they duplicated stronger adapter tests
+for reversed/read-only contexts and non-mutation while additionally locking internal
+`InputSpec`/contiguity details. The meaningful NumPy-only scope, invalid-input and lazy
+import checks remain. Demo assertions that only restated loaded adapter metadata (for
+example native max-horizon values) were removed; the retained demo tests focus on transport
+parity, lazy load/reuse, load failure/retry isolation, validation and WebSocket coalescing.
+One controlled concurrency test was added: it cancels the first blocked prediction, starts a
+second caller and proves the second cannot enter native inference before the first releases.
+
+### Current commands and results
+
+```text
+$ .venv/bin/python -m pytest -o addopts='' -q
+153 passed, 3 skipped
+
+$ HF_HUB_OFFLINE=1 FORECASTERS_NATIVE=1 .venv/bin/python -m pytest -o addopts='' -q
+156 passed
+
+$ .venvs/core-dev/bin/python -m pytest -o addopts='' -q
+22 passed, 107 skipped
+
+$ .venv/bin/mypy src tests/typing_consumer.py
+Success: no issues found in 8 source files
+
+$ .venv/bin/mypy examples/lineup/server.py tests/test_demo_server.py tests/test_demo_native_smoke.py
+Success: no issues found in 3 source files
+
+$ node --check examples/lineup/static/app.js
+# passed
+
+$ git diff --check
+# passed
+```
+
+### Browser regression injection
+
+Temporary headless-Chrome injections against the restarted live server confirmed:
+older same-stroke/error sequence ignored after a newer success; newer error replaced the
+curve with a persistent row error; a later success for the other model did not hide that
+row error; preview targets were immediately invalidated; preview per-model errors were
+visible while the other model's preview curve remained. These checks were temporary and
+added no browser framework or dependency.
+
+The root/supervisor browser independently passed a manual 66-sample drawing, exact HTTP/WS
+median equality for both models at horizon 64, Lanes, toggling Chronos off, and the trend
+preset with only Timestral at horizon 75, with no JavaScript errors. Screenshots:
+`/private/tmp/forecasters-demo-lanes.png` and `/private/tmp/forecasters-demo.png`.
+
+The demo process was restarted on the same free port after the fixes: PID `21512`, URL
+<http://127.0.0.1:8010/>, log `/tmp/forecasters-lineup.log`. A smoke check reported both
+models `ready` (Chronos-Bolt max horizon 64, Timestral max horizon 1024).

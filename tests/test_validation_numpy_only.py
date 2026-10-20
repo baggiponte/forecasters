@@ -9,43 +9,9 @@ import numpy as np
 import pytest
 
 from forecasters._deps import import_torch
-from forecasters._outputs import numpy_native_context
 from forecasters._validation import validate_context, validate_horizon, validate_quantile_levels
 
 SUPPORTED = (0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9)
-
-
-def test_numpy_context_validation_supports_views_readonly_and_longdouble() -> None:
-    base = np.linspace(-2.0, 2.0, 10, dtype=np.float64)
-    view = base[::-1]
-    spec = validate_context(view)
-    assert spec.family == "numpy"
-    assert spec.dtype == view.dtype
-    assert spec.device is None
-
-    readonly = base.copy()
-    readonly.setflags(write=False)
-    assert validate_context(readonly).dtype == readonly.dtype
-
-    longdouble = base.astype(np.longdouble)
-    assert validate_context(longdouble).dtype == longdouble.dtype
-
-
-def test_numpy_native_normalization_copies_views_and_does_not_mutate() -> None:
-    base = np.arange(8, dtype=np.float32)
-    view = base[::-1]
-    before = view.copy()
-    native = numpy_native_context(view)
-    assert native.flags.c_contiguous
-    assert native.flags.writeable
-    np.testing.assert_array_equal(native, before)
-    np.testing.assert_array_equal(view, before)
-
-    readonly = base.copy()
-    readonly.setflags(write=False)
-    native_readonly = numpy_native_context(readonly)
-    assert native_readonly.flags.writeable
-    assert not readonly.flags.writeable
 
 
 @pytest.mark.parametrize(

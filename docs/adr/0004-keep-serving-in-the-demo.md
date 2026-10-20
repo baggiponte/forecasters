@@ -6,7 +6,7 @@ date: "2026-10-20"
 
 # Keep serving and dependency isolation outside the core library
 
-**User review:** accepted in-process core and a simple example server, with the clarification “do not worry about the server now.” Immediate work targets the library and first adapters. FastAPI is a possible later server choice; BentoML was mentioned as an alternative, not selected or required. The serving details below guide the later demo step. The first demo shows the median only; library quantile support does not require bands in that first UI.
+**User review:** accepted in-process core and a simple example server, with the clarification “do not worry about the server now.” The first implementation step targeted the library and first adapters. FastAPI is a possible later server choice; BentoML was mentioned as an alternative, not selected or required. The user subsequently authorized connecting and running the demo, with small logical commits implemented by DeepSeek. For that step the supervisor selected FastAPI with Uvicorn as the simple example server; this choice adds no serving dependency to the core installation. The serving details below guide this demo step. The first demo shows the median only; library quantile support does not require bands in that first UI.
 
 Forecasters is an in-process Python inference layer. A small server under `examples/lineup` owns the browser transport, model list, loading status and request scheduling. Native dependencies are optional per adapter; start by resolving one environment for the two selected small checkpoints. Introduce environment isolation only if an actual incompatibility blocks those checkpoints, with the remedy in the demo or deployment before expanding the core interface.
 

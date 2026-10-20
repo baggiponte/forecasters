@@ -61,7 +61,7 @@ consumers can install the package without PyTorch.
 ## Verified behavior
 
 Current evidence: **153 passed, 3 skipped** in the full development environment (skips are
-native-checkpoint tests), **156 passed** with `FORECASTERS_NATIVE=1`, and **24 passed, 107
+native-checkpoint tests), **156 passed** with `FORECASTERS_NATIVE=1`, and **22 passed, 107
 explicitly skipped** in a core-only environment without Torch, native SDKs or FastAPI. Mypy
 passes on the package, static consumer checks, demo server and server test modules.
 

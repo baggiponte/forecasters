@@ -63,10 +63,8 @@ def test_real_checkpoints_over_http_and_websocket_reuse_loaded_adapters() -> Non
         for key in keys:
             response = client.post(f"/api/models/{key}/load")
             assert response.status_code in {200, 202}
-        catalog = {row["key"]: row for row in [wait_ready(client, key) for key in keys]}
-
-        assert catalog["chronos_bolt"]["max_horizon"] == 64
-        assert catalog["timestral"]["max_horizon"] == 1024
+        for key in keys:
+            wait_ready(client, key)
 
         http_response = client.post(
             "/api/forecast",
@@ -80,9 +78,6 @@ def test_real_checkpoints_over_http_and_websocket_reuse_loaded_adapters() -> Non
             result = http_results[key]
             assert "error" not in result, result
             median = np.asarray(result["median"], dtype=np.float64)
-            assert median.shape == (horizon,)
-            assert np.isfinite(median).all()
-
             adapter = manager.get(key).adapter
             assert adapter is not None
             expected = adapter.predict(np.asarray(context, dtype=np.float64), horizon=horizon)
