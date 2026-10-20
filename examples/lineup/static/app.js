@@ -381,11 +381,17 @@ function handleMessage(m) {
   if (m.type === "error") {
     const sent = m.seq == null ? null : validSent(m);
     if (m.seq != null && !sent) return;
+    if (m.key && m.seq != null && m.seq < (S.lastSeq[m.key] || 0)) return;
     const model = modelOf(m.key);
     const text = String(m.error).split("\n")[0];
-    if (m.key) S.errors[m.key] = text;
+    if (m.key) {
+      S.lastSeq[m.key] = m.seq == null ? S.lastSeq[m.key] : m.seq;
+      S.errors[m.key] = text;
+      delete S.fc[m.key];
+    }
     setStatus(`${model ? model.name : m.key || "Server"}: ${text}`);
     updateMsLabels();
+    invalidate();
     return;
   }
   if (m.type !== "forecast") return;
@@ -452,13 +458,27 @@ function requestForecast(final = false) {
 // ------------------------------------------------------------------ example
 function scheduleExample() {
   clearTimeout(exampleTimer);
+  example = null;
+  if (!touched && !S.stroke) {
+    S.errors = {};
+    invalidate();
+  }
   exampleTimer = setTimeout(showExample, 250);
+}
+
+function setPreviewError(keys, text) {
+  for (const key of keys) {
+    S.errors[key] = text;
+    delete S.fc[key];
+  }
+  updateMsLabels();
+  invalidate();
 }
 
 async function showExample() {
   if (touched || !plot.x1) return;
   const stroke = exampleStroke();
-  const target = { stroke, fc: {}, t0: tipK(stroke) };
+  const target = { stroke, fc: {}, errors: {}, t0: tipK(stroke) };
   example = target;
   invalidate();
   const ready = visibleModels().map((m) => m.key);
@@ -471,11 +491,29 @@ async function showExample() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ y: stroke.ys, h, models: ready }),
     });
-    if (!res.ok) return;
+    if (example !== target || touched) return;
+    if (!res.ok) {
+      setPreviewError(ready, `Example request failed (HTTP ${res.status})`);
+      return;
+    }
     const data = await res.json();
     if (example !== target || touched) return;
     for (const [key, msg] of Object.entries(data.results || {})) {
-      if (!msg || msg.error || !Array.isArray(msg.median)) continue;
+      if (!msg) {
+        target.errors[key] = "No result for this model.";
+        delete target.fc[key];
+        continue;
+      }
+      if (msg.error) {
+        target.errors[key] = String(msg.error).split("\n")[0];
+        delete target.fc[key];
+        continue;
+      }
+      if (!Array.isArray(msg.median)) {
+        target.errors[key] = "Invalid median response.";
+        delete target.fc[key];
+        continue;
+      }
       target.fc[key] = {
         median: msg.median.slice(),
         from: msg.median.slice(),
@@ -483,11 +521,17 @@ async function showExample() {
         at: performance.now(),
         ms: msg.ms,
       };
+      delete target.errors[key];
     }
+    S.errors = { ...target.errors };
     updateMsLabels();
     updateBestStatus();
     invalidate();
-  } catch (e) { /* the example is decoration; ignore */ }
+  } catch (e) {
+    if (example === target && !touched) {
+      setPreviewError(ready, `Example request failed: ${String(e.message || e)}`);
+    }
+  }
 }
 
 // ------------------------------------------------------------------ rendering
