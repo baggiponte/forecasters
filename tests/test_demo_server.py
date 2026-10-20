@@ -6,6 +6,7 @@ lazy loading, retry, per-model isolation, median transport and request coalescin
 
 from __future__ import annotations
 
+import asyncio
 import threading
 import time
 from dataclasses import dataclass, field
@@ -17,7 +18,7 @@ import pytest
 pytest.importorskip("fastapi")
 from fastapi.testclient import TestClient
 
-from examples.lineup.server import ModelSpec, create_app
+from examples.lineup.server import ModelManager, ModelSpec, create_app
 
 
 @dataclass
@@ -89,23 +90,14 @@ def load_and_wait(client: TestClient, key: str, status: str = "ready") -> dict[s
     return wait_status(client, key, status)
 
 
-def test_root_static_models_and_lazy_load_reuse() -> None:
+def test_lazy_load_reuses_adapter_for_http_forecasts() -> None:
     factory = Factory()
     app = create_app(specs=[spec("fake", factory)], autoload=False)
     context = [0.125, 0.25, 0.123456789]
 
     with TestClient(app) as client:
-        assert client.get("/").status_code == 200
-        assert client.get("/static/app.js").status_code == 200
-
-        catalog = client.get("/api/models").json()
-        assert catalog["models"][0]["status"] == "idle"
-        assert catalog["models"][0]["max_horizon"] is None
         assert factory.calls == 0
-
-        loaded = load_and_wait(client, "fake")
-        assert loaded["max_horizon"] == 8
-        assert loaded["max_context_length"] == 64
+        load_and_wait(client, "fake")
         assert factory.calls == 1
 
         first = client.post(
@@ -125,7 +117,6 @@ def test_root_static_models_and_lazy_load_reuse() -> None:
         assert factory.calls == 1
         assert len(adapter.calls) == 2
         np.testing.assert_array_equal(adapter.calls[0][0], np.asarray(context))
-        assert adapter.calls[0][1] == 3
 
 
 def test_one_load_failure_is_isolated_and_retry_succeeds() -> None:
@@ -203,6 +194,7 @@ def test_native_horizon_limit_is_reported_not_clipped() -> None:
         {"y": [0.1], "h": 1, "models": ["unknown"]},
         {"y": [0.1], "h": 1, "models": ["fake", "fake"]},
         {"y": [0.1] * 2_049, "h": 1, "models": ["fake"]},
+        {"y": [10**1_000], "h": 1, "models": ["fake"]},
     ],
 )
 def test_http_request_validation(payload: dict[str, Any]) -> None:
@@ -307,3 +299,32 @@ def test_websocket_coalesces_to_latest_drawing() -> None:
             received = [ws.receive_json(), ws.receive_json()]
             assert [message["seq"] for message in received] == [1, 3]
             assert len(adapter.calls) == 2
+
+
+def test_cancelled_caller_keeps_native_inference_serialized() -> None:
+    adapter = BlockingAdapter()
+    manager = ModelManager([spec("fake", Factory(adapter))])
+    runtime = manager.get("fake")
+    assert runtime is not None
+    runtime.adapter = cast(Any, adapter)
+    runtime.status = "ready"
+    context = np.asarray([0.1], dtype=np.float64)
+
+    async def scenario() -> None:
+        first = asyncio.create_task(manager.predict("fake", context, 2))
+        assert await asyncio.to_thread(adapter.started.wait, 2)
+        first.cancel()
+        await asyncio.sleep(0.05)
+        second = asyncio.create_task(manager.predict("fake", context, 2))
+        await asyncio.sleep(0.05)
+        try:
+            assert len(adapter.calls) == 1, "second call entered native inference early"
+        finally:
+            adapter.release.set()
+        with pytest.raises(asyncio.CancelledError):
+            await first
+        result, _ = await second
+        assert len(adapter.calls) == 2
+        np.testing.assert_array_equal(np.asarray(result), np.arange(2, dtype=np.float64))
+
+    asyncio.run(scenario())

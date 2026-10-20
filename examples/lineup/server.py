@@ -233,9 +233,26 @@ class ModelManager:
 
         started = time.perf_counter()
         async with self._inference_lock:
-            median = await asyncio.to_thread(
-                _predict_median, runtime.adapter, context, horizon
+            # The caller may disappear (for example on a WebSocket disconnect), but the
+            # native thread cannot be stopped. Keep the inference lock until that thread
+            # has actually finished so a second request cannot overlap native compute.
+            native = asyncio.create_task(
+                asyncio.to_thread(_predict_median, runtime.adapter, context, horizon)
             )
+            cancelled = False
+            while True:
+                try:
+                    median = await asyncio.shield(native)
+                    break
+                except asyncio.CancelledError:
+                    cancelled = True
+                    if native.done():
+                        if not native.cancelled():
+                            native.exception()
+                        raise
+                    continue
+            if cancelled:
+                raise asyncio.CancelledError
         elapsed = (time.perf_counter() - started) * 1000.0
         return median, elapsed
 
@@ -277,7 +294,10 @@ def _parse_context(values: object) -> np.ndarray:
     for index, value in enumerate(values):
         if isinstance(value, bool) or not isinstance(value, (int, float)):
             raise RequestError(f"y[{index}] must be a finite number")
-        number = float(value)
+        try:
+            number = float(value)
+        except (OverflowError, ValueError):
+            raise RequestError(f"y[{index}] must be a finite number") from None
         if not math.isfinite(number):
             raise RequestError(f"y[{index}] must be finite")
         cleaned.append(number)
