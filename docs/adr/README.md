@@ -19,6 +19,7 @@ These ADRs are the authority for accepted product and architecture choices, date
 | [0011 — earned abstractions](0011-abstractions-that-earn-their-place.md) | accepted | Adding/removing an abstraction, helper or public interface |
 | [0012 — useful tests](0012-useful-tests.md) | accepted | Adding/removing tests, deciding what to verify manually |
 | [0013 — native prediction intervals](0013-native-prediction-intervals-in-lineup.md) | accepted | Optional Line-up bands, native endpoints and prediction-interval semantics |
+| [0014 — local marimo AnyWidget](0014-local-marimo-anywidget-lineup.md) | accepted | Notebook host, shared canvas, widget state/lifecycle and local-first scope |
 
 ## Metadata convention
 
