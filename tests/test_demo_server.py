@@ -45,6 +45,13 @@ class FakeAdapter:
         self.calls.append((values.copy(), horizon))
         requested = None if quantile_levels is None else tuple(quantile_levels)
         self.quantile_requests.append(requested)
+        if requested is not None:
+            unavailable = [level for level in requested if level not in self.supported]
+            if unavailable:
+                raise ValueError(
+                    f"fake does not support the requested quantile levels {unavailable!r}; "
+                    f"supported native levels are {self.supported!r}"
+                )
         median = values[-1] + np.arange(horizon, dtype=np.float64) * 0.01
         if requested is None:
             return median
@@ -201,7 +208,7 @@ def test_http_and_websocket_interval_parity_and_median_only_off() -> None:
         assert factory.adapter.quantile_requests[-1] is None
 
 
-def test_interval_unsupported_by_loaded_grid_is_a_visible_error() -> None:
+def test_interval_adapter_validation_error_reaches_the_model_error() -> None:
     factory = Factory(FakeAdapter(supported=(0.5, 0.9)))
     app = create_app(specs=[spec("fake", factory)], autoload=False)
     with TestClient(app) as client:
@@ -215,9 +222,9 @@ def test_interval_unsupported_by_loaded_grid_is_a_visible_error() -> None:
                 "include_interval": True,
             },
         ).json()["results"]["fake"]
-        assert "80% prediction interval" in result["error"]
-        assert "0.1" in result["error"]
-        assert factory.adapter.quantile_requests == []
+        assert "does not support the requested quantile levels [0.1]" in result["error"]
+        assert "supported native levels are (0.5, 0.9)" in result["error"]
+        assert factory.adapter.quantile_requests == [(0.1, 0.5, 0.9)]
 
 
 def test_one_load_failure_is_isolated_and_retry_succeeds() -> None:

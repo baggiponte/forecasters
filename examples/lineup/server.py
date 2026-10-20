@@ -39,7 +39,6 @@ MAX_HORIZON = 1_024
 MAX_MODELS_PER_REQUEST = 8
 MAX_WEBSOCKET_TEXT = MAX_BODY_BYTES
 INTERVAL_LEVELS: tuple[float, float, float] = (0.1, 0.5, 0.9)
-NATIVE_LEVEL_ABS_TOL = 1e-7
 
 
 class IntervalPayload(TypedDict):
@@ -298,13 +297,6 @@ class ModelManager:
                 pass
 
 
-def _has_native_level(level: float, supported: tuple[float, ...]) -> bool:
-    return any(
-        math.isclose(level, native, rel_tol=0.0, abs_tol=NATIVE_LEVEL_ABS_TOL)
-        for native in supported
-    )
-
-
 def _predict(
     adapter: Forecaster,
     context: np.ndarray,
@@ -312,13 +304,8 @@ def _predict(
     include_interval: bool,
 ) -> tuple[list[float], IntervalPayload | None]:
     if include_interval:
-        supported = adapter.supported_quantile_levels
-        missing = [level for level in INTERVAL_LEVELS if not _has_native_level(level, supported)]
-        if missing:
-            raise RuntimeError(
-                "the loaded checkpoint cannot provide the central 80% prediction interval; "
-                f"missing native quantile levels {missing!r}; supported levels are {supported!r}"
-            )
+        # The adapter is the single authority on the loaded native grid; its ValueError
+        # becomes a visible per-model error through _forecast_one.
         values = adapter.predict(
             context,
             horizon=horizon,
