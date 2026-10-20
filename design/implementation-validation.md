@@ -450,3 +450,42 @@ $ node --check examples/lineup/static/app.js
 
 The full-suite counts and native library behavior are unchanged from the review-correction
 section above; this increment did not alter core inference.
+
+## Draw-boundary correction — 2026-10-20
+
+The supervisor/root browser found a real boundary bug: drawing past the right edge could
+create hidden extra observations (`ys.length` 175, tip 174) while the UI hid it with
+`Math.min`, and an old forecast could remain visible after the graph had consumed the whole
+horizon. This correction is UI-only; library limits and server responses are unchanged.
+
+- `addPoint` now clamps the drawing/grid coordinate to `0..STEPS-1` before interpolation and
+  stores the clamped x coordinate. A stroke can no longer acquire hidden observations or a
+  tip beyond step 159.
+- UI and export legend now use the actual `stroke.ys.length` rather than masking it with
+  `Math.min`.
+- When remaining horizon space is below 4, requests clear old forecasts, the outstanding
+  `sent` request map and per-model sequence state. Counts become
+  `Predicted: 0 points · leave room on the right`, and the hint asks for right-side space.
+  Delayed old responses cannot pass the cleared request map.
+- New strokes, presets and Escape reset the no-space state, hint and counts. Normal
+  in-bounds drawing and user context values are unchanged.
+
+Temporary Playwright regression against <http://127.0.0.1:8010/>:
+
+```text
+before edge: ys=142 tip=141, forecasts=2, 39 predicted points
+after edge:  ys=160 tip=159, forecasts=0, sent=0,
+             counts=Original 160 points · Predicted: 0 points · leave room on the right
+             hint=Leave room on the right for a forecast.
+after 600 ms: forecasts still 0, no delayed old curve
+preset trend: Original 77 points, 64 predicted points, normal hint restored
+Escape: Original — · Predicted —, normal draw hint restored
+390 px clipboard PNG: 382 × 600, footer legend visually complete and unclipped
+JavaScript errors: none
+```
+
+The root browser independently verified the clipboard PNG, desktop example (69/H64), trend
+preset (77/H64), Chronos-off Timestral (77/H75), correct visual legend and no JavaScript
+errors. Only `node --check` and the temporary browser checks were rerun for this UI-only
+correction; the demo server was not restarted because catalog and server metadata did not
+change. It remains on <http://127.0.0.1:8010/>.

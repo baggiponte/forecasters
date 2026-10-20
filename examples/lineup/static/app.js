@@ -51,6 +51,7 @@ const S = {
   sent: new Map(),       // seq -> { id, t0, generation }
   lastSend: 0,
   pointer: null,
+  noForecastSpace: false,
   modelSig: "",
 };
 
@@ -128,13 +129,14 @@ function newStroke() {
 
 // Only rightward motion extends a stroke; each crossed step gets a linearly interpolated value.
 function addPoint(s, x, y) {
-  const k = (x - plot.x0) / dx;
+  const k = clamp((x - plot.x0) / dx, 0, STEPS - 1);
+  const px = plot.x0 + k * dx;
   const v = clamp((plot.y1 - y) / (plot.y1 - plot.y0), 0, 1);
   if (!s.last) {
     s.k0 = clamp(Math.round(k), 0, STEPS - 1);
     s.ys = [v];
     s.last = { k, v };
-    s.raw.push([x, y]);
+    s.raw.push([px, y]);
     return;
   }
   if (k <= s.last.k) return;
@@ -143,7 +145,7 @@ function addPoint(s, x, y) {
     s.ys.push(clamp(s.last.v + (v - s.last.v) * ((j - s.last.k) / (k - s.last.k)), 0, 1));
   }
   s.last = { k, v };
-  s.raw.push([x, y]);
+  s.raw.push([px, y]);
 }
 
 const tipK = (s) => s.k0 + s.ys.length - 1;
@@ -303,10 +305,12 @@ function updateCounts() {
     updateCopyAvailability();
     return;
   }
-  const original = Math.min(graph.stroke.ys.length, MAX_CONTEXT);
+  const original = graph.stroke.ys.length;
   const selected = visibleModels();
   let predicted = "Predicted —";
-  if (selected.length) {
+  if (S.noForecastSpace) {
+    predicted = "Predicted: 0 points · leave room on the right";
+  } else if (selected.length) {
     const details = selected.map((m) => {
       const f = graph.fc[m.key];
       const value = f && Array.isArray(f.median)
@@ -491,16 +495,31 @@ function updateBestStatus() {
   setStatus(`<b>${fs.length}</b> forecast${fs.length === 1 ? "" : "s"} · ${Math.round(fast)}–${Math.round(slow)} ms · all local`);
 }
 
+function clearNoForecastSpace() {
+  S.noForecastSpace = true;
+  S.fc = {};
+  S.sent.clear();
+  S.lastSeq = {};
+  setHint("Leave room on the right for a forecast.");
+  updateMsLabels();
+  invalidate();
+}
+
 function requestForecast(final = false) {
   const s = S.stroke;
-  if (!s || s.ys.length < MIN_POINTS || !wsReady) return 0;
+  if (!s || s.ys.length < MIN_POINTS) return 0;
+  const t0 = tipK(s);
+  const h = Math.min(nativeHorizonCap(), STEPS - 1 - t0);
+  if (h < 4) {
+    if (!S.noForecastSpace) clearNoForecastSpace();
+    return 0;
+  }
+  S.noForecastSpace = false;
+  if (!wsReady) return 0;
   const keys = visibleModels().map((m) => m.key);
   if (!keys.length) return 0;
   const now = performance.now();
   if (!final && now - S.lastSend < 85) return 0;
-  const t0 = tipK(s);
-  const h = Math.min(nativeHorizonCap(), STEPS - 1 - t0);
-  if (h < 4) return 0;
   S.lastSend = now;
   const seq = ++S.seq;
   S.sent.set(seq, { id: s.id, t0, generation: S.generation });
@@ -519,6 +538,7 @@ function requestForecast(final = false) {
 function scheduleExample() {
   clearTimeout(exampleTimer);
   example = null;
+  S.noForecastSpace = false;
   if (!touched && !S.stroke) {
     S.errors = {};
     invalidate();
@@ -835,7 +855,7 @@ async function makeExportBlob() {
   const cropY = Math.max(0, plot.y0 - 8);
   const cropW = Math.min(W - cropX, plot.x1 - plot.x0 + 20);
   const cropH = Math.min(H - cropY, plot.y1 - plot.y0 + 16);
-  const original = Math.min(graph.stroke.ys.length, MAX_CONTEXT);
+  const original = graph.stroke.ys.length;
   const legend = [{ color: INK, text: `Original · ${original} points` }];
   for (const { model, forecast } of graph.forecasts) {
     const bits = [modelDisplayName(model)];
@@ -964,6 +984,7 @@ canvas.addEventListener("pointerdown", (e) => {
   S.sent.clear();
   S.lastSeq = {};
   S.focus = null;
+  S.noForecastSpace = false;
   setHint(HINT.draw);
   addPoint(S.stroke, e.clientX, e.clientY);
   updateCounts();
@@ -1020,6 +1041,7 @@ for (const b of document.querySelectorAll("[data-preset]")) {
     S.errors = {};
     S.sent.clear();
     S.lastSeq = {};
+    S.noForecastSpace = false;
     setHint("A synthetic line, to compare the models on something repeatable.");
     requestForecast(true);
     updateCounts();
@@ -1038,6 +1060,7 @@ addEventListener("keydown", (e) => {
     S.errors = {};
     S.sent.clear();
     S.lastSeq = {};
+    S.noForecastSpace = false;
     S.generation += 1;
     setHint(HINT.draw);
     scheduleExample();
