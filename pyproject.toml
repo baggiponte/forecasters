@@ -1,11 +1,42 @@
-[project]
-name = "forecasters"
-version = "0.0.1"
-description = "Unified toolbox for pretrained time-series models to perform forecasting tasks"
-readme = "README.md"
-requires-python = ">=3.9"
-dependencies = []
+[tool.uv.workspace]
+members = ["packages/forecasters"]
 
-[build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
+[tool.uv]
+default-groups = ["dev"]
+
+[tool.uv.sources]
+forecasters = { workspace = true }
+timestral = { git = "https://github.com/mistralai/timestral.git", rev = "a534bdbd244d64f3d9d743f46c7bf6fc330ed4ff" }
+torch = [
+  { index = "pytorch-cpu", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
+]
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[dependency-groups]
+dev = [
+  "pytest>=8.0",
+  "mypy>=1.9",
+  "torch>=2.3",
+]
+native = [
+  "forecasters[chronos]",
+  "timestral",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["packages/forecasters/tests"]
+addopts = "-q"
+markers = [
+  "native: requires downloaded native SDK checkpoints",
+  "backend: requires the optional PyTorch test backend",
+]
+
+[tool.mypy]
+python_version = "3.12"
+warn_unused_ignores = true
+check_untyped_defs = true
+ignore_missing_imports = true
