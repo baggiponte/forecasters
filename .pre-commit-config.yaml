@@ -1,6 +1,16 @@
 minimum_pre_commit_version: "3.2.0"
 
 repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: 44b5042edab9382aba712eed4f9c7bab7a3d6a3e  # v0.17.0
+    hooks:
+      - id: ruff-check
+        args: ["--fix"]
+        stages: [pre-commit, manual]
+      - id: ruff-format
+        types_or: [python, pyi]
+        stages: [pre-commit, manual]
+
   - repo: https://github.com/zizmorcore/zizmor-pre-commit
     rev: c92afdf2c6ca336aaa8f39e2bd8d48f62dbd8e1f  # v1.31.1
     hooks:

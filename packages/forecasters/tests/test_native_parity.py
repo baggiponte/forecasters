@@ -7,8 +7,9 @@ against a direct call to the official SDK on the same frozen context.
 from __future__ import annotations
 
 import os
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 import numpy as np
 import pytest
@@ -34,6 +35,7 @@ def frozen_context() -> np.ndarray:
 
 def load_chronos() -> tuple[Any, Any]:
     from chronos import ChronosBoltPipeline
+
     from forecasters import ChronosBolt
 
     adapter = ChronosBolt.from_pretrained(
@@ -46,8 +48,9 @@ def load_chronos() -> tuple[Any, Any]:
 
 
 def load_timestral() -> tuple[Any, Any]:
-    from forecasters import Timestral
     from timestral import TimestralForecaster
+
+    from forecasters import Timestral
 
     adapter = Timestral.from_pretrained(
         "mistralai/Timestral-5M", cache_dir=CACHE_DIR, local_files_only=True
@@ -74,13 +77,17 @@ def timestral_raw(native: Any, context: np.ndarray, horizon: int) -> np.ndarray:
     return raw.detach()[0, 0].numpy()
 
 
-LOADERS: list[tuple[str, Callable[[], tuple[Any, Any]], Callable[[Any, np.ndarray, int], np.ndarray]]] = [
+LOADERS: list[
+    tuple[str, Callable[[], tuple[Any, Any]], Callable[[Any, np.ndarray, int], np.ndarray]]
+] = [
     ("chronos-bolt-tiny", load_chronos, chronos_raw),
     ("timestral-5m", load_timestral, timestral_raw),
 ]
 
 
-@pytest.mark.parametrize(("name", "loader", "raw_forecast"), LOADERS, ids=[item[0] for item in LOADERS])
+@pytest.mark.parametrize(
+    ("name", "loader", "raw_forecast"), LOADERS, ids=[item[0] for item in LOADERS]
+)
 def test_median_and_requested_quantiles_match_native_sdk(
     name: str,
     loader: Callable[[], tuple[Any, Any]],

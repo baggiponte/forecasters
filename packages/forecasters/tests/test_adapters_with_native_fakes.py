@@ -156,10 +156,15 @@ def make_timestral() -> Harness:
     )
 
 
-FACTORIES = [pytest.param(make_chronos, id="chronos-bolt"), pytest.param(make_timestral, id="timestral")]
+FACTORIES = [
+    pytest.param(make_chronos, id="chronos-bolt"),
+    pytest.param(make_timestral, id="timestral"),
+]
 
 
-def expected(harness: Harness, index: int, horizon: int, last_context: float, dtype: Any) -> np.ndarray:
+def expected(
+    harness: Harness, index: int, horizon: int, last_context: float, dtype: Any
+) -> np.ndarray:
     return np.array(
         [native_value(index, step, last_context) for step in range(horizon)], dtype=dtype
     )
@@ -203,7 +208,9 @@ def test_numpy_family_dtype_shapes_and_quantile_order(factory: Any, dtype: Any) 
     for column, level in enumerate(requested):
         np.testing.assert_array_equal(
             quantiles[:, column],
-            expected(harness, harness.levels.index(level), horizon, float(context[-1]), context.dtype),
+            expected(
+                harness, harness.levels.index(level), horizon, float(context[-1]), context.dtype
+            ),
         )
 
 
@@ -455,7 +462,9 @@ def test_context_and_horizon_limits_prevent_native_call(factory: Any) -> None:
     assert harness.model_name in str(excinfo.value)
 
     with pytest.raises(ValueError) as excinfo:
-        harness.adapter.predict(np.ones(8, dtype=np.float32), horizon=harness.adapter.max_horizon + 1)
+        harness.adapter.predict(
+            np.ones(8, dtype=np.float32), horizon=harness.adapter.max_horizon + 1
+        )
     assert str(harness.adapter.max_horizon) in str(excinfo.value)
     assert harness.model_name in str(excinfo.value)
     assert harness.native.calls == []
@@ -519,6 +528,8 @@ def test_from_pretrained_loads_and_reuses_native_model(
     for last in (1.0, 2.0):
         result = adapter.predict(np.full(8, last, dtype=np.float32), horizon=2)
         index = adapter.supported_quantile_levels.index(0.5)
-        np.testing.assert_array_equal(result, [native_value(index, step, last) for step in range(2)])
+        np.testing.assert_array_equal(
+            result, [native_value(index, step, last) for step in range(2)]
+        )
     assert len(load_calls) == 1
     assert len(native.calls) == 2

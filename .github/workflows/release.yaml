@@ -26,6 +26,7 @@ jobs:
         with:
           version: "0.13.4"
           python-version: "3.12"
+          enable-cache: false
 
       - name: Require a versioned tag reachable from main
         run: |
@@ -37,14 +38,14 @@ jobs:
             echo "::error::Tag $tag does not point at a commit reachable from origin/main"
             exit 1
           fi
-          project_version="$(uv version --package forecasters --short)"
+          project_version="$(uv version --package=forecasters --short)"
           if [ "$version" != "$project_version" ]; then
             echo "::error::Tag $tag does not match forecasters version $project_version"
             exit 1
           fi
 
       - name: Build only the public package
-        run: uv build --package forecasters --no-sources --out-dir dist/forecasters
+        run: uv build --package=forecasters --no-sources --out-dir=dist/forecasters
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
         with:
@@ -65,6 +66,10 @@ jobs:
           name: forecasters-dist
           path: dist/forecasters
 
-      - uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086  # v1.14.3
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884  # v10.3.0
         with:
-          packages-dir: dist/forecasters/
+          version: "0.13.4"
+          enable-cache: false
+
+      - name: Publish to PyPI with trusted publishing
+        run: uv publish --trusted-publishing=always 'dist/forecasters/*'

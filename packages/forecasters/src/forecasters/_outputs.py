@@ -47,9 +47,7 @@ def _finite(values: object) -> bool:
 def restore_output(values: torch.Tensor, spec: InputSpec, *, model_name: str) -> object:
     """Validate selected values, then restore the caller's family, dtype and device."""
     if not _finite(values):
-        raise RuntimeError(
-            f"{model_name} native SDK returned non-finite selected forecast values"
-        )
+        raise RuntimeError(f"{model_name} native SDK returned non-finite selected forecast values")
 
     restored: object
     if spec.family == "torch":

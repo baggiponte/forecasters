@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Sequence, TypeVar, cast, overload
+from typing import TYPE_CHECKING, Any, TypeVar, cast, overload
 
 import numpy as np
 from numpy.typing import NDArray
@@ -164,4 +165,3 @@ class Timestral:
             "NDArray[np.floating[Any]] | torch.Tensor",
             restore_output(selected, spec, model_name=self._model_name),
         )
-

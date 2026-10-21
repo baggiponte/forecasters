@@ -234,7 +234,7 @@ distribution must be importable in the worker interpreter.
 ## 4. Process and protocol
 
 - One worker per `Forecaster`, started by `fit` with:
-  `python -m forecasters.worker --adapter <module:Class>`.
+  `python -m forecasters.worker --adapter=<module:Class>`.
 - The worker interpreter must have `forecasters` importable (`pip install --no-deps forecasters`) and the native
   SDK installed. The library does **not** inject its own `site-packages` into `PYTHONPATH`; that would leak the
   parent's torch/numpy into the worker and defeat isolation. The worker must support the core's minimum numpy

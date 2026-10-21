@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Protocol, Sequence, TypeVar, overload
+from collections.abc import Sequence
+from typing import TYPE_CHECKING, Any, Protocol, TypeVar, overload
 
 import numpy as np
 from numpy.typing import NDArray

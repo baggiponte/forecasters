@@ -40,3 +40,11 @@ python_version = "3.12"
 warn_unused_ignores = true
 check_untyped_defs = true
 ignore_missing_imports = true
+
+[tool.ruff]
+src = ["packages/forecasters/src"]
+target-version = "py311"
+line-length = 100
+
+[tool.ruff.lint]
+extend-select = ["I"]

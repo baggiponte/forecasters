@@ -14,5 +14,7 @@ def test_import_forecasters_is_lazy() -> None:
         "loaded = forbidden & set(sys.modules); "
         "assert not loaded, loaded"
     )
-    completed = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True)
+    completed = subprocess.run(
+        [sys.executable, "-c", code], capture_output=True, text=True, check=False
+    )
     assert completed.returncode == 0, completed.stderr

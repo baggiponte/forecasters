@@ -15,8 +15,8 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Literal, cast
 
 import numpy as np
-from numpy.typing import NDArray
 from array_api_compat import array_namespace, device, is_numpy_array, is_torch_array
+from numpy.typing import NDArray
 
 if TYPE_CHECKING:
     import torch
@@ -124,7 +124,9 @@ def validate_quantile_levels(
     requested: list[float] = []
     for item in levels:
         if isinstance(item, bool) or not isinstance(item, numbers.Real):
-            raise TypeError(f"quantile levels must be real numbers, not {type(item).__name__}: {item!r}")
+            raise TypeError(
+                f"quantile levels must be real numbers, not {type(item).__name__}: {item!r}"
+            )
         value = float(item)
         if not math.isfinite(value):
             raise ValueError(f"quantile levels must be finite; got {value!r}")

@@ -69,9 +69,14 @@ def test_quantile_matching_preserves_order_and_float32_representation() -> None:
 @pytest.mark.parametrize(
     ("levels", "error"),
     [
-        ([], ValueError), ([0.0], ValueError), ([1.0], ValueError),
-        ([float("nan")], ValueError), ([float("inf")], ValueError),
-        ([True], TypeError), (["0.5"], TypeError), ([0.1, 0.1], ValueError),
+        ([], ValueError),
+        ([0.0], ValueError),
+        ([1.0], ValueError),
+        ([float("nan")], ValueError),
+        ([float("inf")], ValueError),
+        ([True], TypeError),
+        (["0.5"], TypeError),
+        ([0.1, 0.1], ValueError),
         (np.array([0.5]), TypeError),
     ],
 )
