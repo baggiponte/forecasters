@@ -36,7 +36,7 @@ def require_native_tensor(values: object, *, model_name: str) -> torch.Tensor:
         raise RuntimeError(
             f"{model_name} native SDK returned {type(values).__name__}; expected a torch.Tensor"
         )
-    return cast("torch.Tensor", values)
+    return values
 
 
 def _finite(values: object) -> bool:
@@ -52,7 +52,7 @@ def restore_output(values: torch.Tensor, spec: InputSpec, *, model_name: str) ->
     restored: object
     if spec.family == "torch":
         restored = values.detach().to(
-            device=cast("str | torch.device | None", spec.device),
+            device=spec.device,
             dtype=cast("torch.dtype", spec.dtype),
         )
         destination = f"device {spec.device}"

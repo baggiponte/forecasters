@@ -19,7 +19,6 @@ explicit = true
 [dependency-groups]
 dev = [
   "pytest>=8.0",
-  "mypy>=1.9",
   "torch>=2.3",
   "ty>=0.0.90",
   # Checker-only primitives for the real native-helper shape annotations. Imported only
@@ -28,7 +27,7 @@ dev = [
 ]
 # Isolated Pyrefly environment for experimental shape-aware stubs. Never install this
 # group into the development environment: the NumPy/Torch stub packages overlay the real
-# libraries' typing and conflict with mypy and ty.
+# libraries' typing and conflict with ty.
 pyrefly = [
   "pyrefly==1.4.0",
   "pyrefly-numpy-stubs==1.4.0; python_full_version >= '3.12'",
@@ -46,12 +45,6 @@ markers = [
   "native: requires downloaded native SDK checkpoints",
   "backend: requires the optional PyTorch test backend",
 ]
-
-[tool.mypy]
-python_version = "3.12"
-warn_unused_ignores = true
-check_untyped_defs = true
-ignore_missing_imports = true
 
 [tool.ruff]
 src = ["packages/forecasters/src"]

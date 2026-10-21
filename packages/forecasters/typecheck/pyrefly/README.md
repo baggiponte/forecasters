@@ -22,8 +22,8 @@ uv run --isolated --locked --no-default-groups --group=pyrefly \
 
 The group is pinned in `uv.lock`. It must run isolated because
 `pyrefly-numpy-stubs`/`pyrefly-torch-stubs` overlay the real libraries' type
-information and conflict with mypy and ty. Do not add this group to the default
-development environment.
+information and conflict with ty. Do not add this group to the default development
+environment.
 
 ## Native implementation proof
 
@@ -71,7 +71,7 @@ quantile levels, and a NumPy/Torch backend mismatch.
 - A non-literal `horizon: int` produces a gradual first axis (`(int, ...)`). Literal
   horizons are exact.
 - `pyrefly-numpy-stubs` requires Python 3.12+, so this check runs on 3.12 even though the
-  library supports Python 3.11+. The normal ty/mypy checks still target 3.11 semantics.
+  library supports Python 3.11+. The normal ty check still targets 3.11 semantics.
 - The stubs are a checker-only overlay for the documented public API. They are not shipped
   in the wheel, are never imported at runtime, and are not a proof of the implementation.
   The separate native-helper check is the implementation proof; runtime validation remains

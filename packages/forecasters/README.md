@@ -75,10 +75,10 @@ be resolved from PyPI. The workspace root defines the Timestral Git source for d
 
 ## Typing
 
-The package ships `py.typed`. `predict` is overloaded so mypy and ty preserve the input
-family: a NumPy context returns `NDArray` with the input floating dtype, and a Torch
-context returns `Tensor`. The shape is `(H,)` for the default native median and `(H, Q)`
-for requested levels.
+The package ships `py.typed`. `predict` is overloaded so ty preserves the input family: a
+NumPy context returns `NDArray` with the input floating dtype, and a Torch context returns
+`Tensor`. The shape is `(H,)` for the default native median and `(H, Q)` for requested
+levels.
 
 The source repository also contains an experimental Pyrefly overlay that adds static
 tensor-shape inference for the public API. With the shape-aware NumPy/Torch stubs,

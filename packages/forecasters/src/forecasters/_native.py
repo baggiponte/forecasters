@@ -5,8 +5,8 @@ They use legacy ``IntVar`` symbols imported only under ``TYPE_CHECKING`` and pos
 annotations, so the runtime package has no shape-extensions dependency and importing
 ``forecasters`` still works with NumPy alone.
 
-ty and mypy do not understand Pyrefly's shape syntax. The narrowly scoped ignores on the
-annotated lines keep their checks meaningful for the rest of the module. These annotations
+ty does not understand Pyrefly's shape syntax. The narrowly scoped ignores on the
+annotated lines keep its checks meaningful for the rest of the module. These annotations
 are not intended for runtime introspection; use the public ``predict`` signatures for that.
 """
 
@@ -28,26 +28,26 @@ else:
 
 
 def chronos_quantiles(
-    raw: torch.Tensor[[1, Q, H]],  # type: ignore[type-arg, valid-type]  # ty: ignore[invalid-type-form]
+    raw: torch.Tensor[[1, Q, H]],  # ty: ignore[invalid-type-form]
     *,
     median_index: int,
     indices: list[int] | None,
-) -> torch.Tensor[[H]] | torch.Tensor[[H, int]]:  # type: ignore[type-arg, valid-type]  # ty: ignore[invalid-type-form]
+) -> torch.Tensor[[H]] | torch.Tensor[[H, int]]:  # ty: ignore[invalid-type-form]
     """Normalize Chronos ``(1, Q, H)`` and select the requested quantiles."""
     full = raw.detach()[0].transpose(0, 1)
     if TYPE_CHECKING:
-        assert_type(full, torch.Tensor[[H, Q]])  # type: ignore[type-arg, valid-type]  # ty: ignore[not-subscriptable]
+        assert_type(full, torch.Tensor[[H, Q]])  # ty: ignore[not-subscriptable]
     return full[:, median_index] if indices is None else full[:, indices]
 
 
 def timestral_quantiles(
-    raw: torch.Tensor[[1, 1, H, Q]],  # type: ignore[type-arg, valid-type]  # ty: ignore[invalid-type-form]
+    raw: torch.Tensor[[1, 1, H, Q]],  # ty: ignore[invalid-type-form]
     *,
     median_index: int,
     indices: list[int] | None,
-) -> torch.Tensor[[H]] | torch.Tensor[[H, int]]:  # type: ignore[type-arg, valid-type]  # ty: ignore[invalid-type-form]
+) -> torch.Tensor[[H]] | torch.Tensor[[H, int]]:  # ty: ignore[invalid-type-form]
     """Normalize Timestral ``(1, 1, H, Q)`` and select the requested quantiles."""
     full = raw.detach()[0, 0]
     if TYPE_CHECKING:
-        assert_type(full, torch.Tensor[[H, Q]])  # type: ignore[type-arg, valid-type]  # ty: ignore[not-subscriptable]
+        assert_type(full, torch.Tensor[[H, Q]])  # ty: ignore[not-subscriptable]
     return full[:, median_index] if indices is None else full[:, indices]

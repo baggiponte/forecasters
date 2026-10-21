@@ -35,11 +35,6 @@ python-version = "3.11"
 # Native SDKs are optional extras; their imports are intentionally lazy and untyped here.
 allowed-unresolved-imports = ["chronos", "timestral"]
 
-[tool.ty.rules]
-# ty narrows array_api_compat family predicates more aggressively than mypy. These casts
-# protect mypy's dynamic SDK boundary and are not shape claims.
-redundant-cast = "ignore"
-
 [tool.ty.src]
-# Match the existing mypy consumer scope; Pyrefly owns the shape fixtures.
+# Match the existing ty consumer scope; Pyrefly owns the shape fixtures.
 include = ["src", "tests/typing_consumer.py"]

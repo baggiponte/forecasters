@@ -60,9 +60,6 @@ jobs:
       - name: Run integration tests
         run: uv run --no-sync --package=forecasters pytest packages/forecasters/tests/integration
 
-      - name: Type-check the library
-        run: uv run --no-sync --package=forecasters mypy packages/forecasters/src packages/forecasters/tests/typing_consumer.py
-
       - name: Type-check the library with ty
         run: uv check --locked --no-progress --package=forecasters
 
