@@ -15,22 +15,22 @@ SUPPORTED = (0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9)
 
 
 @pytest.mark.parametrize(
-    "context",
+    ("context", "error"),
     [
-        [1.0, 2.0],
-        (1.0, 2.0),
-        np.array([1, 2], dtype=np.int64),
-        np.array([True, False]),
-        np.array([1.0 + 0j], dtype=np.complex128),
-        np.array(1.0),
-        np.ones((2, 2), dtype=np.float32),
-        np.array([], dtype=np.float32),
-        np.array([1.0, np.nan]),
-        np.array([1.0, np.inf]),
+        ([1.0, 2.0], TypeError),
+        ((1.0, 2.0), TypeError),
+        (np.array([1, 2], dtype=np.int64), TypeError),
+        (np.array([True, False]), TypeError),
+        (np.array([1.0 + 0j], dtype=np.complex128), TypeError),
+        (np.array(1.0), ValueError),
+        (np.ones((2, 2), dtype=np.float32), ValueError),
+        (np.array([], dtype=np.float32), ValueError),
+        (np.array([1.0, np.nan]), ValueError),
+        (np.array([1.0, np.inf]), ValueError),
     ],
 )
-def test_invalid_numpy_contexts_are_rejected(context: Any) -> None:
-    with pytest.raises((TypeError, ValueError)):
+def test_invalid_numpy_contexts_are_rejected(context: Any, error: type[Exception]) -> None:
+    with pytest.raises(error):
         validate_context(context)
 
 
@@ -64,6 +64,20 @@ def test_quantile_matching_preserves_order_and_float32_representation() -> None:
         [0.9, float(np.float32(0.1)), 0.5], SUPPORTED, model_name="fake"
     )
     assert indices == [8, 0, 4]
+
+
+@pytest.mark.parametrize(
+    ("levels", "error"),
+    [
+        ([], ValueError), ([0.0], ValueError), ([1.0], ValueError),
+        ([float("nan")], ValueError), ([float("inf")], ValueError),
+        ([True], TypeError), (["0.5"], TypeError), ([0.1, 0.1], ValueError),
+        (np.array([0.5]), TypeError),
+    ],
+)
+def test_invalid_quantile_levels_are_rejected(levels: Any, error: type[Exception]) -> None:
+    with pytest.raises(error):
+        validate_quantile_levels(levels, SUPPORTED, model_name="fake")
 
 
 def test_quantile_failures_identify_model_and_levels() -> None:

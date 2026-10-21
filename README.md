@@ -23,7 +23,8 @@ uv run --package forecasters pytest
 uv run --package forecasters mypy packages/forecasters/src packages/forecasters/tests/typing_consumer.py
 ```
 
-Install the native SDKs used by the real-checkpoint and fake-boundary tests with:
+The default development group includes Torch for fake-boundary tests. Install the native
+SDKs for real-checkpoint tests with:
 
 ```bash
 uv sync --group dev --group native
@@ -45,6 +46,17 @@ prek run --all-files --hook-stage manual
 The manual stage also scans full Git history for secrets. In a linked worktree that shares
 the main checkout's hooks directory, use the worktree-specific hook path or avoid installing
 hooks there; `--allow-missing-config` keeps checkouts without this configuration working.
+
+CI syncs the locked development environment once, then runs tests and mypy with
+`uv run --no-sync`. Both wheel and sdist are installed into fresh NumPy-only environments
+and tested; the installed package must retain `py.typed`. A separate archive check keeps
+application code out of both distributions.
+
+The library job uses `setup-uv` to cache dependencies and prune downloaded wheels before saving, following
+[Astral's CI guidance](https://docs.astral.sh/uv/guides/integration/github/#caching).
+The checks job caches prek's hook environments by configuration and tool version, without
+a second uv cache for the small tool launcher.
+Release builds use no restored cache and publish through a separate OIDC job.
 
 ## Build and release
 

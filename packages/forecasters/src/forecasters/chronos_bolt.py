@@ -40,20 +40,14 @@ class ChronosBolt:
     _max_horizon: int
     _median_index: int
 
-    def __init__(self) -> None:
-        raise TypeError("Use ChronosBolt.from_pretrained(...) to load a checkpoint")
-
-    @classmethod
-    def _from_native(cls, native: Any, *, model_name: str) -> "ChronosBolt":
-        """Build an adapter around an already-loaded native object (also used by tests)."""
-        self = cls.__new__(cls)
+    def __init__(self, native: Any, *, model_name: str) -> None:
+        """Wrap an already-loaded SDK object; use from_pretrained to load a checkpoint."""
         self._pipeline = native
         self._model_name = model_name
         self._levels = tuple(float(level) for level in native.quantiles)
         self._max_context_length = int(native.model_context_length)
         self._max_horizon = int(native.model_prediction_length)
         self._median_index = median_index(self._levels, model_name=self._model_name)
-        return self
 
     @classmethod
     def from_pretrained(
@@ -82,7 +76,7 @@ class ChronosBolt:
             local_files_only=local_files_only,
         )
         pipeline.model.to(device)
-        return cls._from_native(pipeline, model_name=model_name)
+        return cls(pipeline, model_name=model_name)
 
     @property
     def supported_quantile_levels(self) -> tuple[float, ...]:

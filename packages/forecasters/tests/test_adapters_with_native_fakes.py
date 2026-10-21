@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass, field
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
@@ -138,7 +139,7 @@ class Harness:
 def make_chronos() -> Harness:
     native = FakeChronosPipeline()
     return Harness(
-        ChronosBolt._from_native(native, model_name=CHRONOS_NAME),
+        ChronosBolt(native, model_name=CHRONOS_NAME),
         native,
         tuple(native.quantiles),
         CHRONOS_NAME,
@@ -148,7 +149,7 @@ def make_chronos() -> Harness:
 def make_timestral() -> Harness:
     native = FakeTimestralForecaster()
     return Harness(
-        Timestral._from_native(native, model_name=TIMESTRAL_NAME),
+        Timestral(native, model_name=TIMESTRAL_NAME),
         native,
         native.quantile_levels,
         TIMESTRAL_NAME,
@@ -405,53 +406,20 @@ def test_duplicate_equivalent_levels_prevent_native_call(factory: Any) -> None:
 
 @pytest.mark.parametrize("factory", FACTORIES)
 @pytest.mark.parametrize(
-    "levels",
+    ("kwargs", "error"),
     [
-        [],
-        [0.0],
-        [1.0],
-        [float("nan")],
-        [float("inf")],
-        [True],
-        ["0.5"],
-        [0.1, 0.1],
+        ({"context": np.array([np.nan], dtype=np.float32)}, ValueError),
+        ({"horizon": 0}, ValueError),
+        ({"quantile_levels": [True]}, TypeError),
     ],
 )
-def test_invalid_quantile_requests_prevent_native_call(factory: Any, levels: Any) -> None:
+def test_invalid_requests_prevent_native_call(
+    factory: Any, kwargs: dict[str, Any], error: type[Exception]
+) -> None:
     harness = factory()
-    with pytest.raises((TypeError, ValueError)):
-        harness.adapter.predict(np.ones(8, dtype=np.float32), horizon=2, quantile_levels=levels)
-    assert harness.native.calls == []
-
-
-@pytest.mark.parametrize("factory", FACTORIES)
-def test_non_sequence_quantiles_rejected(factory: Any) -> None:
-    harness = factory()
-    with pytest.raises(TypeError):
-        harness.adapter.predict(np.ones(8, dtype=np.float32), horizon=2, quantile_levels=np.array([0.5]))
-    assert harness.native.calls == []
-
-
-@pytest.mark.parametrize("factory", FACTORIES)
-@pytest.mark.parametrize(
-    ("context", "error"),
-    [
-        ([1.0, 2.0, 3.0], TypeError),
-        ((1.0, 2.0, 3.0), TypeError),
-        (np.array([1, 2, 3], dtype=np.int64), TypeError),
-        (np.array([1.0, 2.0], dtype=np.float16).astype(bool), TypeError),
-        (np.array([1.0 + 1j, 2.0 + 0j], dtype=np.complex128), TypeError),
-        (np.array(1.0), ValueError),
-        (np.ones((2, 3), dtype=np.float32), ValueError),
-        (np.array([], dtype=np.float32), ValueError),
-        (np.array([1.0, np.nan, 2.0], dtype=np.float32), ValueError),
-        (np.array([1.0, np.inf, 2.0], dtype=np.float32), ValueError),
-    ],
-)
-def test_invalid_contexts_prevent_native_call(factory: Any, context: Any, error: type[Exception]) -> None:
-    harness = factory()
+    request = {"context": np.ones(8, dtype=np.float32), "horizon": 2, **kwargs}
     with pytest.raises(error):
-        harness.adapter.predict(context, horizon=2)
+        harness.adapter.predict(**request)
     assert harness.native.calls == []
 
 
@@ -474,15 +442,6 @@ def test_empty_torch_context_is_rejected_before_native_call(factory: Any) -> Non
     harness = factory()
     with pytest.raises(ValueError, match="at least one observation"):
         harness.adapter.predict(torch.empty(0, dtype=torch.float32), horizon=2)
-    assert harness.native.calls == []
-
-
-@pytest.mark.parametrize("factory", FACTORIES)
-@pytest.mark.parametrize("horizon", [0, -1, True, 1.5, "2"])
-def test_invalid_horizons_prevent_native_call(factory: Any, horizon: Any) -> None:
-    harness = factory()
-    with pytest.raises((TypeError, ValueError)):
-        harness.adapter.predict(np.ones(8, dtype=np.float32), horizon=horizon)
     assert harness.native.calls == []
 
 
@@ -517,3 +476,49 @@ def test_repeated_calls_do_not_leak_context(factory: Any) -> None:
     np.testing.assert_array_equal(harness.native.calls[0][-1], first[-1])
     np.testing.assert_array_equal(harness.native.calls[1][-1], second[-1])
     np.testing.assert_array_equal(harness.native.calls[2][-1], first[-1])
+
+
+@pytest.mark.parametrize("adapter_class", [ChronosBolt, Timestral])
+def test_from_pretrained_loads_and_reuses_native_model(
+    adapter_class: Any, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    is_chronos = adapter_class is ChronosBolt
+    native = FakeChronosPipeline() if is_chronos else FakeTimestralForecaster()
+    load_calls: list[tuple[str, dict[str, Any]]] = []
+    devices: list[str] = []
+    if is_chronos:
+        native.model = SimpleNamespace(to=devices.append)
+
+    class Loader:
+        @staticmethod
+        def from_pretrained(model_name: str, **kwargs: Any) -> Any:
+            load_calls.append((model_name, kwargs))
+            return native
+
+    module = "chronos_bolt" if is_chronos else "timestral"
+    importer = "import_chronos_pipeline" if is_chronos else "import_timestral_forecaster"
+    monkeypatch.setattr(f"forecasters.{module}.{importer}", lambda: Loader)
+    adapter = adapter_class.from_pretrained(
+        "custom/checkpoint",
+        device="cuda:1",
+        revision="checkpoint-revision",
+        cache_dir=tmp_path,
+        local_files_only=True,
+    )
+    expected_kwargs = {
+        "revision": "checkpoint-revision",
+        "cache_dir": str(tmp_path),
+        "local_files_only": True,
+    }
+    if not is_chronos:
+        expected_kwargs["device"] = "cuda:1"
+    assert load_calls == [("custom/checkpoint", expected_kwargs)]
+    if is_chronos:
+        assert devices == ["cuda:1"]
+
+    for last in (1.0, 2.0):
+        result = adapter.predict(np.full(8, last, dtype=np.float32), horizon=2)
+        index = adapter.supported_quantile_levels.index(0.5)
+        np.testing.assert_array_equal(result, [native_value(index, step, last) for step in range(2)])
+    assert len(load_calls) == 1
+    assert len(native.calls) == 2

@@ -26,7 +26,12 @@ jobs:
         with:
           version: "0.13.4"
           python-version: "3.12"
-          enable-cache: true
+          enable-cache: false
+
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        with:
+          path: ~/.cache/prek
+          key: prek-${{ runner.os }}-py3.12-0.5.6-${{ hashFiles('.pre-commit-config.yaml') }}
 
       - name: Run the same checks as local pre-commit, plus full-history secret scanning
         run: uvx --from prek==0.5.6 prek run --all-files --hook-stage manual --show-diff-on-failure
@@ -44,20 +49,21 @@ jobs:
           version: "0.13.4"
           python-version: "3.12"
           enable-cache: true
+          prune-cache: true
 
       - name: Install development environment
-        run: uv sync --locked --group dev
+        run: uv sync --locked
 
       - name: Run library tests
-        run: uv run --package forecasters pytest
+        run: uv run --no-sync --package forecasters pytest
 
       - name: Type-check the library
-        run: uv run --package forecasters mypy packages/forecasters/src packages/forecasters/tests/typing_consumer.py
+        run: uv run --no-sync --package forecasters mypy packages/forecasters/src packages/forecasters/tests/typing_consumer.py
 
       - name: Build the public package
         run: uv build --package forecasters --no-sources --out-dir dist/forecasters
 
-      - name: Inspect wheel and source distribution
+      - name: Check that application code is excluded
         run: |
           python - <<'PY'
           from pathlib import Path
@@ -65,23 +71,11 @@ jobs:
           import zipfile
 
           artifacts = Path("dist/forecasters")
-          wheels = list(artifacts.glob("forecasters-*.whl"))
-          sdists = list(artifacts.glob("forecasters-*.tar.gz"))
-          assert len(wheels) == 1, wheels
-          assert len(sdists) == 1, sdists
-
-          with zipfile.ZipFile(wheels[0]) as wheel:
-              names = set(wheel.namelist())
-          assert "forecasters/py.typed" in names, "py.typed missing from wheel"
-          assert not any(name.startswith(("forecasters_lineup", "apps/")) for name in names)
-
-          with tarfile.open(sdists[0]) as sdist:
-              names = set(sdist.getnames())
-          assert any(name.endswith("/src/forecasters/py.typed") for name in names), (
-              "py.typed missing from source distribution"
-          )
-          assert not any("/apps/" in name or "forecasters_lineup" in name for name in names)
-          print(f"validated {wheels[0].name} and {sdists[0].name}")
+          with zipfile.ZipFile(next(artifacts.glob("*.whl"))) as wheel:
+              names = wheel.namelist()
+          with tarfile.open(next(artifacts.glob("*.tar.gz"))) as sdist:
+              names += sdist.getnames()
+          assert not any("forecasters_lineup" in name or "apps" in Path(name).parts for name in names)
           PY
 
       - name: Install and test each artifact in an isolated environment
