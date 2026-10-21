@@ -52,7 +52,7 @@ jobs:
           prune-cache: true
 
       - name: Install development environment
-        run: uv sync --locked
+        run: uv sync --locked --package=forecasters --group=dev
 
       - name: Run unit tests
         run: uv run --no-sync --package=forecasters pytest packages/forecasters/tests/unit
@@ -72,3 +72,58 @@ jobs:
           for artifact in dist/forecasters/*.whl dist/forecasters/*.tar.gz; do
             uv run --isolated --no-project --with="$artifact" python packages/forecasters/tests/integration/smoke.py
           done
+
+  lineup:
+    name: Line-up app tests and wheel assets
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884  # v10.3.0
+        with:
+          version: "0.13.4"
+          python-version: "3.12"
+          enable-cache: true
+          prune-cache: true
+          cache-suffix: lineup
+
+      - name: Install the standalone app with web and test dependencies
+        run: uv sync --locked --package=forecasters-lineup --extra=web --group=dev
+
+      - name: Run Line-up app tests
+        run: uv run --no-sync --package=forecasters-lineup pytest apps/lineup/tests
+
+      - name: Verify the shared engine does not import FastAPI
+        run: |
+          uv run --no-sync --package=forecasters-lineup python -c \
+            "import sys, forecasters_lineup.engine; assert 'fastapi' not in sys.modules"
+
+      - name: Build the private app wheel
+        run: uv build --package=forecasters-lineup --no-sources --out-dir=dist/lineup
+
+      - name: Verify packaged static assets and font licenses
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import zipfile
+
+          wheels = list(Path("dist/lineup").glob("forecasters_lineup-*.whl"))
+          assert len(wheels) == 1, wheels
+          with zipfile.ZipFile(wheels[0]) as wheel:
+              names = set(wheel.namelist())
+          required = {
+              "forecasters_lineup/static/index.html",
+              "forecasters_lineup/static/lineup.css",
+              "forecasters_lineup/static/lineup.js",
+              "forecasters_lineup/static/standalone.js",
+              "forecasters_lineup/static/fonts/Archivo-100_900.woff2",
+              "forecasters_lineup/static/fonts/IBMPlexSans-var.woff2",
+              "forecasters_lineup/static/fonts/OFL-Archivo.txt",
+              "forecasters_lineup/static/fonts/OFL-IBMPlex.txt",
+          }
+          assert required <= names, sorted(required - names)
+          assert "forecasters_lineup/static/widget-entry.js" not in names
+          print(f"validated app wheel assets: {wheels[0].name}")
+          PY

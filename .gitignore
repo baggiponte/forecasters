@@ -1,6 +1,6 @@
 .venv/
 .venvs/
-.hf-cache/
+.hf-cache
 .uvcache/
 .cache/
 __pycache__/
