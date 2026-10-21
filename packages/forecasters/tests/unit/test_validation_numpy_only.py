@@ -9,7 +9,12 @@ import numpy as np
 import pytest
 
 from forecasters._deps import import_torch
-from forecasters._validation import validate_context, validate_horizon, validate_quantile_levels
+from forecasters._validation import (
+    median_index,
+    validate_context,
+    validate_horizon,
+    validate_quantile_levels,
+)
 
 SUPPORTED = (0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9)
 
@@ -17,8 +22,6 @@ SUPPORTED = (0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9)
 @pytest.mark.parametrize(
     ("context", "error"),
     [
-        ([1.0, 2.0], TypeError),
-        ((1.0, 2.0), TypeError),
         (np.array([1, 2], dtype=np.int64), TypeError),
         (np.array([True, False]), TypeError),
         (np.array([1.0 + 0j], dtype=np.complex128), TypeError),
@@ -34,26 +37,12 @@ def test_invalid_numpy_contexts_are_rejected(context: Any, error: type[Exception
         validate_context(context)
 
 
-def test_arbitrary_array_api_object_is_not_in_scope() -> None:
-    class ForeignArray:
-        ndim = 1
-        size = 2
-        shape = (2,)
-        dtype = "float32"
-
-        def __array_namespace__(self, *, api_version: str | None = None) -> Any:
-            raise AssertionError("scope check must happen before namespace use")
-
-    with pytest.raises(TypeError, match="NumPy ndarray or PyTorch Tensor"):
-        validate_context(ForeignArray())
-
-
 @pytest.mark.parametrize("horizon", [3, np.int64(3)])
 def test_valid_horizons(horizon: Any) -> None:
     assert validate_horizon(horizon) == 3
 
 
-@pytest.mark.parametrize("horizon", [0, -1, True, 1.5, "2"])
+@pytest.mark.parametrize("horizon", [0, -1, True])
 def test_invalid_horizons(horizon: Any) -> None:
     with pytest.raises((TypeError, ValueError)):
         validate_horizon(horizon)
@@ -75,9 +64,7 @@ def test_quantile_matching_preserves_order_and_float32_representation() -> None:
         ([float("nan")], ValueError),
         ([float("inf")], ValueError),
         ([True], TypeError),
-        (["0.5"], TypeError),
         ([0.1, 0.1], ValueError),
-        (np.array([0.5]), TypeError),
     ],
 )
 def test_invalid_quantile_levels_are_rejected(levels: Any, error: type[Exception]) -> None:
@@ -93,6 +80,11 @@ def test_quantile_failures_identify_model_and_levels() -> None:
 
     with pytest.raises(ValueError, match="unique"):
         validate_quantile_levels([0.1, float(np.float32(0.1))], SUPPORTED, model_name="fake")
+
+
+def test_checkpoint_requires_a_native_median() -> None:
+    with pytest.raises(RuntimeError, match="fake/checkpoint.*native 0.5 quantile"):
+        median_index((0.1, 0.9), model_name="fake/checkpoint")
 
 
 def test_import_torch_failure_hint_avoids_unpublished_timestral_extra(

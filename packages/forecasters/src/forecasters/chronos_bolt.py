@@ -32,18 +32,20 @@ class ChronosBolt:
 
     _pipeline: Any
     _model_name: str
-    _levels: tuple[float, ...]
-    _max_context_length: int
-    _max_horizon: int
+    supported_quantile_levels: tuple[float, ...]
+    max_context_length: int
+    max_horizon: int
     _median_index: int
 
     def __init__(self, native: Any, *, model_name: str) -> None:
         self._pipeline = native
         self._model_name = model_name
-        self._levels = tuple(float(level) for level in native.quantiles)
-        self._max_context_length = int(native.model_context_length)
-        self._max_horizon = int(native.model_prediction_length)
-        self._median_index = median_index(self._levels, model_name=self._model_name)
+        self.supported_quantile_levels = tuple(float(level) for level in native.quantiles)
+        self.max_context_length = int(native.model_context_length)
+        self.max_horizon = int(native.model_prediction_length)
+        self._median_index = median_index(
+            self.supported_quantile_levels, model_name=self._model_name
+        )
 
     @classmethod
     def from_pretrained(
@@ -65,18 +67,6 @@ class ChronosBolt:
         )
         pipeline.model.to(device)
         return cls(pipeline, model_name=model_name)
-
-    @property
-    def supported_quantile_levels(self) -> tuple[float, ...]:
-        return self._levels
-
-    @property
-    def max_context_length(self) -> int:
-        return self._max_context_length
-
-    @property
-    def max_horizon(self) -> int:
-        return self._max_horizon
 
     @overload
     def predict(
@@ -107,19 +97,19 @@ class ChronosBolt:
         context_spec: InputSpec = validate_context(context)
         horizon = validate_horizon(horizon)
 
-        if context.shape[-1] > self._max_context_length:
+        if context.shape[-1] > self.max_context_length:
             raise ValueError(
                 f"context length {context.shape[-1]} exceeds {self._model_name}'s supported "
-                f"maximum of {self._max_context_length}"
+                f"maximum of {self.max_context_length}"
             )
-        if horizon > self._max_horizon:
+        if horizon > self.max_horizon:
             raise ValueError(
-                f"horizon {horizon} exceeds {self._model_name}'s native maximum of {self._max_horizon}"
+                f"horizon {horizon} exceeds {self._model_name}'s native maximum of {self.max_horizon}"
             )
 
         quantile_indices = validate_quantile_levels(
             quantile_levels,
-            self._levels,
+            self.supported_quantile_levels,
             model_name=self._model_name,
         )
 
@@ -139,7 +129,7 @@ class ChronosBolt:
             model_name=self._model_name,
         )
         # Chronos-Bolt returns exactly (batch=1, loaded quantile grid, horizon).
-        expected_shape = (1, len(self._levels), horizon)
+        expected_shape = (1, len(self.supported_quantile_levels), horizon)
         if tuple(native_output.shape) != expected_shape:
             raise RuntimeError(
                 f"{self._model_name} native SDK returned shape {tuple(native_output.shape)}; "
