@@ -27,7 +27,20 @@ native = [
   "timestral",
 ]
 
+[tool.pytest.ini_options]
+testpaths = ["packages/forecasters/tests"]
+addopts = "-q"
+markers = [
+  "native: requires downloaded native SDK checkpoints",
+  "backend: requires the optional PyTorch test backend",
+]
 
+[tool.mypy]
+files = ["packages/forecasters/src", "packages/forecasters/tests/typing_consumer.py"]
+python_version = "3.12"
+warn_unused_ignores = true
+check_untyped_defs = true
+ignore_missing_imports = true
 
 [tool.ruff]
 src = ["packages/forecasters/src"]
