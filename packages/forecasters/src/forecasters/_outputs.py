@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Any, cast
 import numpy as np
 from array_api_compat import array_namespace, is_torch_array
 
-from ._validation import InputSpec
+from forecasters._validation import InputSpec
 
 if TYPE_CHECKING:
     import torch

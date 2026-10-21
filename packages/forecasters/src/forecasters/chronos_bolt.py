@@ -8,9 +8,9 @@ from typing import TYPE_CHECKING, Any, Sequence, TypeVar, cast, overload
 import numpy as np
 from numpy.typing import NDArray
 
-from ._deps import import_chronos_pipeline, import_torch
-from ._outputs import numpy_native_context, require_native_tensor, restore_output
-from ._validation import (
+from forecasters._deps import import_chronos_pipeline, import_torch
+from forecasters._outputs import numpy_native_context, require_native_tensor, restore_output
+from forecasters._validation import (
     InputSpec,
     median_index,
     validate_context,

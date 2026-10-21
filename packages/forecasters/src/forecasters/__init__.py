@@ -4,9 +4,9 @@ Importing :mod:`forecasters` does not import PyTorch or either native SDK. Load 
 adapter with ``ChronosBolt.from_pretrained(...)`` or ``Timestral.from_pretrained(...)``.
 """
 
-from ._forecaster import Forecaster
-from .chronos_bolt import ChronosBolt
-from .timestral import Timestral
+from forecasters._forecaster import Forecaster
+from forecasters.chronos_bolt import ChronosBolt
+from forecasters.timestral import Timestral
 
 __version__ = "0.1.0"
 
