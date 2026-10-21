@@ -1,13 +1,7 @@
-"""Native quantile-axis normalization and selection shared by the adapters.
+"""Native quantile-axis normalization and selection.
 
-Pyrefly checks the shape annotations in this module against the real executable body.
-They use legacy ``IntVar`` symbols imported only under ``TYPE_CHECKING`` and postponed
-annotations, so the runtime package has no shape-extensions dependency and importing
-``forecasters`` still works with NumPy alone.
-
-ty does not understand Pyrefly's shape syntax. The narrowly scoped ignores on the
-annotated lines keep its checks meaningful for the rest of the module. These annotations
-are not intended for runtime introspection; use the public ``predict`` signatures for that.
+Pyrefly checks the shape expressions that ty ignores below. Keep shape imports and
+assertions under TYPE_CHECKING so NumPy-only users need neither Torch nor shape_extensions.
 """
 
 from __future__ import annotations

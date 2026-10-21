@@ -1,18 +1,7 @@
-"""Run the Pyrefly tensor-shape fixtures.
+"""Check the native helper and public shape fixtures with Pyrefly.
 
-Native helper: Pyrefly must check the real ``src/forecasters/_native.py`` implementation
-with no errors, proving the native quantile-axis normalization and selection shapes.
-
-Positive fixture: Pyrefly must report no errors, so every ``assert_type`` proves the
-inferred public shape.
-
-Negative fixture: Pyrefly must report exactly the errors declared by ``# EXPECT:``
-comments. A stale expectation (an error that disappears or moves) fails the check.
-
-Run with the isolated dependency group so the shape-aware stub packages are installed:
-
-    uv run --isolated --locked --no-default-groups --group=pyrefly \
-        python packages/forecasters/typecheck/pyrefly/run.py
+Negative fixtures must emit exactly the diagnostics marked by EXPECT comments;
+otherwise a lost shape check could silently pass CI.
 """
 
 from __future__ import annotations

@@ -1,9 +1,4 @@
-"""Pyrefly-only public API overlay.
-
-The signatures mirror ``forecasters.__init__`` and the concrete adapters. ``predict``
-shape overloads live in ``_predict.pyi`` and are inherited here. See the package
-``typecheck/pyrefly/README.md`` for the coverage boundaries.
-"""
+"""Pyrefly-only public API overlay; keep signatures aligned with the runtime classes."""
 
 from pathlib import Path
 from typing import Any, Protocol

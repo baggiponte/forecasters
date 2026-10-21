@@ -1,12 +1,7 @@
-"""Shape-only overlay for the public ``predict`` contract.
+"""Pyrefly-only predict signatures; these stubs are not shipped in the wheel.
 
-This stub is never imported at runtime. It exists so Pyrefly can check the shapes the
-library documents and validates: a one-dimensional context produces ``(horizon,)`` for the
-default median or ``(horizon, quantiles)`` when levels are requested.
-
-``Q`` is intentionally not bound by an argument. Python sequence types do not carry their
-length at the type level, so the quantile axis stays gradual (displayed as ``int``) while
-the rank, horizon and dtype/backend remain precise.
+Q stays gradual because Sequence does not encode its length. Torch stubs track
+shape but not dtype or device; runtime validation still covers those properties.
 """
 
 from collections.abc import Sequence
