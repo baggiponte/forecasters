@@ -1,0 +1,8 @@
+# Check the real native-helper implementation, not a stub or a duplicated fixture.
+#
+# The helper uses Pyrefly's legacy IntVar annotations under TYPE_CHECKING plus postponed
+# annotations. No shape-extension import happens at runtime.
+project-includes = ["../../src/forecasters/_native.py"]
+python-version = "3.12"
+preset = "default"
+required-version = "==1.4.0"

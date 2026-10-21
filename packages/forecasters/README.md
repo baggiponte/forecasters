@@ -73,6 +73,48 @@ The Timestral SDK is installed from its official Git repository because it has n
 distribution. The package intentionally does not advertise a `timestral` extra that cannot
 be resolved from PyPI. The workspace root defines the Timestral Git source for development.
 
+## Typing
+
+The package ships `py.typed`. `predict` is overloaded so mypy and ty preserve the input
+family: a NumPy context returns `NDArray` with the input floating dtype, and a Torch
+context returns `Tensor`. The shape is `(H,)` for the default native median and `(H, Q)`
+for requested levels.
+
+The source repository also contains an experimental Pyrefly overlay that adds static
+tensor-shape inference for the public API. With the shape-aware NumPy/Torch stubs,
+Pyrefly proves a one-dimensional context of length `C` becomes `(H,)` or `(H, Q)` and can
+reject a wrong horizon, rank, NumPy dtype or backend at the call site. A separate Pyrefly
+config checks the real `_native.py` helper that both adapters use to normalize the Chronos
+and Timestral native quantile axes. This syntax is understood by Pyrefly only. Postponed
+annotations defer the annotations themselves, but `assert_type`'s second argument is an
+ordinary expression and is evaluated at runtime; this example quotes it and is static-only:
+
+```python
+from __future__ import annotations
+
+from typing import assert_type
+
+import numpy as np
+
+from forecasters import ChronosBolt
+
+context: np.ndarray[[64], np.dtype[np.float32]]
+model = ChronosBolt.from_pretrained()
+assert_type(model.predict(context, horizon=8), "np.ndarray[[8], np.dtype[np.float32]]")
+assert_type(
+    model.predict(context, horizon=8, quantile_levels=[0.1, 0.5, 0.9]),
+    "np.ndarray[[8, int], np.dtype[np.float32]]",
+)
+```
+
+The quantile axis is gradual (`int`) because sequence lengths are not tracked statically;
+changing the requested levels cannot change the proven rank or horizon. Torch dtypes are
+not tracked by the current Pyrefly Torch shape stubs. These stubs are a checker-only
+development fixture, are not included in the wheel and are not imported at runtime.
+Runtime validation remains authoritative for context and horizon limits, native SDK
+result shapes, finiteness and dtype/device restoration. See
+[`typecheck/pyrefly/README.md`](typecheck/pyrefly/README.md) for commands and limitations.
+
 ## Verified behavior
 
 Real-checkpoint parity, native-boundary fake tests, NumPy-only validation and lazy-import

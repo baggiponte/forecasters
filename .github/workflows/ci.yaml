@@ -63,6 +63,9 @@ jobs:
       - name: Type-check the library
         run: uv run --no-sync --package=forecasters mypy packages/forecasters/src packages/forecasters/tests/typing_consumer.py
 
+      - name: Type-check the library with ty
+        run: uv check --locked --no-progress --package=forecasters
+
       - name: Build the public package
         run: uv build --package=forecasters --no-sources --out-dir=dist/forecasters
 
@@ -72,3 +75,23 @@ jobs:
           for artifact in dist/forecasters/*.whl dist/forecasters/*.tar.gz; do
             uv run --isolated --no-project --with="$artifact" python packages/forecasters/tests/integration/smoke.py
           done
+
+  tensor-shapes:
+    name: Experimental Pyrefly tensor shapes
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884  # v10.3.0
+        with:
+          version: "0.13.4"
+          python-version: "3.12"
+          enable-cache: true
+          prune-cache: true
+
+      - name: Check inferred predict shapes with Pyrefly
+        run: >-
+          uv run --isolated --locked --no-default-groups --group=pyrefly
+          python packages/forecasters/typecheck/pyrefly/run.py
