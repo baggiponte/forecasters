@@ -1,0 +1,28 @@
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[project]
+name = "forecasters-lineup-marimo"
+version = "0.1.0"
+description = "Private local marimo and AnyWidget host for the Line-up example"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "forecasters-lineup",
+  "marimo>=0.25,<0.26",
+  "anywidget>=0.11,<0.12",
+  "traitlets>=5.16,<6",
+]
+authors = [{ name = "baggiponte" }]
+keywords = ["time-series", "forecasting", "lineup", "marimo", "anywidget"]
+classifiers = [
+  "Private :: Do Not Upload",
+  "Development Status :: 3 - Alpha",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/forecasters_lineup_marimo"]
