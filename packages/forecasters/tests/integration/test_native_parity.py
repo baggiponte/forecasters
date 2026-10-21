@@ -22,7 +22,7 @@ pytestmark = [
     ),
 ]
 
-CACHE_DIR = Path(__file__).resolve().parents[3] / ".hf-cache"
+CACHE_DIR = Path(__file__).resolve().parents[4] / ".hf-cache"
 
 
 def frozen_context() -> np.ndarray:

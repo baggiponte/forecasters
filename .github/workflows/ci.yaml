@@ -54,8 +54,11 @@ jobs:
       - name: Install development environment
         run: uv sync --locked
 
-      - name: Run library tests
-        run: uv run --no-sync --package=forecasters pytest
+      - name: Run unit tests
+        run: uv run --no-sync --package=forecasters pytest packages/forecasters/tests/unit
+
+      - name: Run integration tests
+        run: uv run --no-sync --package=forecasters pytest packages/forecasters/tests/integration
 
       - name: Type-check the library
         run: uv run --no-sync --package=forecasters mypy packages/forecasters/src packages/forecasters/tests/typing_consumer.py
@@ -67,5 +70,5 @@ jobs:
         run: |
           set -euo pipefail
           for artifact in dist/forecasters/*.whl dist/forecasters/*.tar.gz; do
-            uv run --isolated --no-project --with="$artifact" python packages/forecasters/tests/smoke.py
+            uv run --isolated --no-project --with="$artifact" python packages/forecasters/tests/integration/smoke.py
           done

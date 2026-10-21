@@ -2,7 +2,7 @@
 
 These tests need the optional PyTorch test backend because native SDK tensors are Torch
 tensors. The module is skipped per test when PyTorch is absent; NumPy-only validation is
-covered in ``test_validation_numpy_only.py``.
+covered in ``test_validation_numpy_only.py`` in this directory.
 """
 
 from __future__ import annotations

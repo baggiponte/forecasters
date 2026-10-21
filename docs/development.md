@@ -6,7 +6,7 @@ changes add the private Line-up and marimo applications under `apps/`.
 
 ```bash
 uv sync --locked
-uv run --no-sync --package=forecasters pytest
+uv run --no-sync --package=forecasters pytest packages/forecasters/tests/unit
 uv run --no-sync --package=forecasters mypy packages/forecasters/src packages/forecasters/tests/typing_consumer.py
 prek run --all-files --hook-stage=manual
 ```
@@ -16,11 +16,21 @@ lockfile validation and secret scanning. Its manual stage scans full Git history
 Use `prek install --allow-missing-config` to enable commit hooks; linked worktrees share
 Git hooks, so configure a worktree-specific hook path if needed.
 
+Tests are split by boundary:
+
+- `tests/unit/`: input validation and adapters with fake native SDKs.
+- `tests/integration/`: package imports, real-checkpoint parity and the distribution smoke script.
+- `tests/typing_consumer.py`: static checks run by mypy.
+
+Paths above are relative to `packages/forecasters/`. Running `pytest` without a path
+collects both suites; native-checkpoint tests remain opt-in. CI shows unit and integration
+tests as separate steps, and runs the smoke script against built distributions.
+
 For real-checkpoint parity tests, install the optional native SDKs:
 
 ```bash
 uv sync --locked --group=native
-FORECASTERS_NATIVE=1 uv run --no-sync --package=forecasters pytest
+FORECASTERS_NATIVE=1 uv run --no-sync --package=forecasters pytest packages/forecasters/tests/integration
 ```
 
 Tests expect downloaded checkpoints in `.hf-cache/`; installing SDKs does not download weights.
