@@ -1,6 +1,6 @@
 # Forecasters architecture decisions
 
-These ADRs are the authority for accepted product and architecture choices, dated 2026-10-20. ADR 0003 is superseded by ADR 0007; all others are accepted. Implementation evidence and historical research live outside this directory; acceptance is not evidence that a check passed.
+These ADRs are the authority for accepted product and architecture choices, dated 2026-10-20. ADR 0003 is superseded by ADR 0007; all others are accepted. Acceptance is not evidence that a check passed.
 
 ## Route by change
 
@@ -38,10 +38,7 @@ superseded_by:
 
 Do not encode references or explanations in `status`, add reverse metadata fields, or use filenames or titles as IDs. A replacement reference must point to a different existing ADR and must not form a cycle. Full replacement marks the old ADR superseded; a clarification to an otherwise accepted ADR stays in its text with links. No extra status vocabulary or metadata tooling is needed.
 
-## Evidence and history
+## Related documents
 
-- [Implementation validation](../../design/implementation-validation.md) for versions, commands, counts, parity results and timings.
-- [Submitted decision review](../../design/decision-review-2026-10-20.md) for historical form answers and later corrections.
-- [Repository audit](../../design/repository-audit.md), [interface comparison](../../design/interface-options.md) and [model research](../../design/research-summary-2026-10-20.md) for research and frontend context.
 - [Glossary](../../GLOSSARY.md) for domain terms.
-- [`CONTRACT.md`](../../CONTRACT.md) and the external reviews are historical proposals, not binding decisions.
+- [`CONTRACT.md`](../../CONTRACT.md) is a historical proposal, not a binding decision.

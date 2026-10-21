@@ -77,10 +77,7 @@ be resolved from PyPI. The workspace root defines the Timestral Git source for d
 
 Real-checkpoint parity, native-boundary fake tests, NumPy-only validation and lazy-import
 checks live in `packages/forecasters/tests` in the source repository. The real-checkpoint
-tests are opt-in with `FORECASTERS_NATIVE=1` and use cached checkpoints. See the repository's
-[implementation validation](../../design/implementation-validation.md) for exact SDK
-revisions, commands, results and measured observations. These are measured evidence, not
-performance guarantees.
+tests are opt-in with `FORECASTERS_NATIVE=1` and use cached checkpoints.
 
 Not implemented in this milestone: training/fine-tuning, sample-based forecasts, batching,
 multivariate inputs, covariates, timestamps, missing-value policies, calibration, model

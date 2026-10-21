@@ -12,4 +12,4 @@ Remove tests that only repeat a private helper already covered through public be
 
 No coverage percentage, test-count target, rule that every change requires a test, or blanket ban on tests. Add or strengthen a test for a plausible regression introduced or exposed by the change; when uncertain, make one temporary mutation and keep it only if the test fails for the right reason.
 
-Review heuristic: be able to say what failure a changed test catches, or what surviving coverage makes a removed test safe. This is a judgment check, not a paperwork requirement or a rule that every change needs a test. Current test inventory, commands and counts belong in [implementation evidence](../../design/implementation-validation.md), not here.
+Review heuristic: be able to say what failure a changed test catches, or what surviving coverage makes a removed test safe. This is a judgment check, not a paperwork requirement or a rule that every change needs a test.

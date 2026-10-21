@@ -14,4 +14,3 @@ The earlier contract required a worker interpreter, JSON-lines protocol, handsha
 
 Native dependencies remain optional per adapter. No deployment platform, authentication model, scheduler or multi-user serving guarantee is implied.
 
-See [implementation evidence](../../design/implementation-validation.md) for the current routes, tests and browser checks, and the [repository audit](../../design/repository-audit.md) for transport and renderer details.

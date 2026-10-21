@@ -16,4 +16,4 @@ This contract concerns ordinary NumPy arrays and Torch tensors, not arbitrary su
 
 Native computation may use another dtype or device; casting the result back restores representation, not precision already lost during inference. No zero-copy or autograd behaviour is promised.
 
-**Decision provenance:** the user accepted floating dtype preservation and returning Torch results on the input tensor's device. The supervisor chose floating-only contexts with explicit rejection of other dtypes rather than silent conversion. Historical form answers and corrections are in the [submitted decision review](../../design/decision-review-2026-10-20.md).
+**Decision provenance:** the user accepted floating dtype preservation and returning Torch results on the input tensor's device. The supervisor chose floating-only contexts with explicit rejection of other dtypes rather than silent conversion.

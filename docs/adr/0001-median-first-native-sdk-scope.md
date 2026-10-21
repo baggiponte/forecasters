@@ -14,6 +14,6 @@ Reject a context longer than the loaded checkpoint supports and a horizon longer
 
 The limit policy keeps comparisons attributable to the native models and keeps the library small. A request that cannot be answered natively fails visibly instead of returning a quietly altered forecast. Catalog membership is not an implementation promise. Sample-based models remain deferred under [ADR 0009](0009-defer-sample-based-forecasts.md).
 
-The user accepted this scope and limit policy in the [submitted decision review](../../design/decision-review-2026-10-20.md). [ADR 0002](0002-minimal-predict-interface.md) owns the public call, ADR 0006 the accepted array families and returned representation, ADR 0007 quantile requests and ADR 0008 loading. This decision is not evidence that implementation or native validation has passed.
+The user accepted this scope and limit policy. [ADR 0002](0002-minimal-predict-interface.md) owns the public call, ADR 0006 the accepted array families and returned representation, ADR 0007 quantile requests and ADR 0008 loading. This decision is not evidence that implementation or native validation has passed.
 
 Native implementation evidence: [Chronos-Bolt](https://github.com/amazon-science/chronos-forecasting/blob/main/src/chronos/chronos_bolt.py), [Timestral](https://github.com/mistralai/timestral/blob/main/src/timestral/forecaster.py). See the [glossary](../../GLOSSARY.md) for median and prediction-interval terms.

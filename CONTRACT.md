@@ -10,9 +10,7 @@
 **Product direction:** a sklearn-flavoured `fit` / `predict` / `predict_proba` surface over native
 foundation-model SDKs. It is *not* a full sklearn estimator and it trains nothing.
 
-This revision incorporates `design/model-matrix.md`, `design/prior-art.md`, `design/edge-cases.md`, and two
-external reviews by `github-copilot/claude-opus-5.5` (`design/opencode-review.md`,
-`design/opencode-review-2.md`). Deliberate product overrides are recorded in §10.
+Deliberate product overrides are recorded in §10.
 
 ---
 
@@ -379,7 +377,7 @@ or interpolation. It also checks shapes, finiteness, native-level handling, poin
 flags. Passing it is a release requirement for built-in adapters and the recommended badge for third-party
 adapters.
 
-The protocol/worker contract is covered by the scenarios in `design/edge-cases.md`: stdout noise, malformed
+The protocol/worker contract is covered by scenarios including stdout noise, malformed
 replies, version/capability mismatch, crash, timeout, closed object, context truncation, level-out-of-range,
 short reply, duplicate levels, and concurrent calls.
 
@@ -464,13 +462,3 @@ class MyAdapter(Adapter):
 - Point-only representation: `levels=None`, `values=None`; `predict` works, quantile methods raise.
 - `Forecast.interval` includes the native levels in its error message.
 - Alias decision: both `predict_quantiles` (canonical) and `predict_proba` (alias) ship in 0.1.
-
----
-
-## 11. Sources
-
-- Model capabilities and native APIs: `design/model-matrix.md`.
-- Prior-art interface survey: `design/prior-art.md`.
-- Edge cases and invariants: `design/edge-cases.md`.
-- External contract reviews: `design/opencode-review.md`, `design/opencode-review-2.md`.
-- Verification pass on the eight review-2 items: `design/opencode-review-3.md`.

@@ -62,11 +62,9 @@ publisher on PyPI for project `forecasters` with owner `baggiponte`, repository
 `forecasters` and workflow `release.yaml`. Pushing a branch or merging a pull request does
 not publish a package.
 
-## Architecture and evidence
+## Architecture
 
 - [Architecture decisions](docs/adr/README.md), including
   [ADR 0015](docs/adr/0015-uv-workspace-and-library-publishing.md) for this workspace.
-- [Implementation validation](design/implementation-validation.md) for historical commands,
-  native parity results and measured observations.
 - [Glossary](GLOSSARY.md).
 - [`CONTRACT.md`](CONTRACT.md) is a historical design proposal, not the implemented contract.

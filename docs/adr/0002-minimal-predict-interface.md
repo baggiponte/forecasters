@@ -16,4 +16,4 @@ The rejected alternative is `fit(y).predict(horizon)`: it captures mutable conte
 
 **User decision, 2026-10-20:** direct, typed, minimal `predict(context, horizon=...)` is accepted over context-capturing `fit(y).predict(horizon)` and immediate scikit-learn integration. Acceptance is not evidence that an implementation exists.
 
-Evidence: [scikit-learn estimator contract](https://scikit-learn.org/stable/developers/develop.html), [sktime BaseForecaster](https://www.sktime.net/en/stable/api_reference/auto_generated/sktime.forecasting.base.BaseForecaster.html), and the [interface comparison](../../design/interface-options.md). The direct form also appears in [The Forecasting Company's t0 quickstart](https://huggingface.co/theforecastingcompany/t0-alpha).
+Evidence: [scikit-learn estimator contract](https://scikit-learn.org/stable/developers/develop.html) and [sktime BaseForecaster](https://www.sktime.net/en/stable/api_reference/auto_generated/sktime.forecasting.base.BaseForecaster.html). The direct form also appears in [The Forecasting Company's t0 quickstart](https://huggingface.co/theforecastingcompany/t0-alpha).
