@@ -92,7 +92,7 @@ jobs:
             uv venv --python 3.12 "$envdir"
             uv pip install --python "$envdir/bin/python" "$artifact" pytest
             "$envdir/bin/python" -c \
-              "import importlib.metadata as m; import importlib.resources as r; import forecasters; assert forecasters.__version__ == m.version('forecasters'); assert r.files('forecasters').joinpath('py.typed').is_file()"
+              "import importlib.resources as r; import forecasters; assert r.files('forecasters').joinpath('py.typed').is_file()"
             "$envdir/bin/python" -m pytest -q \
               packages/forecasters/tests/test_validation_numpy_only.py \
               packages/forecasters/tests/test_lazy_imports.py

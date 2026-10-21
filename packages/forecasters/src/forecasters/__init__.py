@@ -8,6 +8,4 @@ from forecasters._forecaster import Forecaster
 from forecasters.chronos_bolt import ChronosBolt
 from forecasters.timestral import Timestral
 
-__version__ = "0.1.0"
-
-__all__ = ["ChronosBolt", "Forecaster", "Timestral", "__version__"]
+__all__ = ["ChronosBolt", "Forecaster", "Timestral"]
