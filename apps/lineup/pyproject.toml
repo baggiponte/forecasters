@@ -1,0 +1,30 @@
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[project]
+name = "forecasters-lineup"
+version = "0.1.0"
+description = "Private local Line-up demo for the forecasters library"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "forecasters",
+  "chronos-forecasting>=2.3,<3",
+  "timestral",
+]
+authors = [{ name = "baggiponte" }]
+keywords = ["time-series", "forecasting", "lineup", "demo"]
+classifiers = [
+  "Private :: Do Not Upload",
+  "Development Status :: 3 - Alpha",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+]
+
+[project.optional-dependencies]
+web = ["fastapi>=0.115,<1", "uvicorn>=0.30,<1", "websockets>=12"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/forecasters_lineup"]

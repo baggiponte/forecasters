@@ -1,5 +1,5 @@
 [tool.uv.workspace]
-members = ["packages/forecasters"]
+members = ["packages/forecasters", "apps/lineup"]
 
 [tool.uv]
 default-groups = ["dev"]
@@ -20,6 +20,7 @@ explicit = true
 dev = [
   "pytest>=8.0",
   "mypy>=1.9",
+  "httpx>=0.27",
   "torch>=2.3",
 ]
 native = [
@@ -28,7 +29,7 @@ native = [
 ]
 
 [tool.pytest.ini_options]
-testpaths = ["packages/forecasters/tests"]
+testpaths = ["packages/forecasters/tests", "apps/lineup/tests"]
 addopts = "-q"
 markers = [
   "native: requires downloaded native SDK checkpoints",
@@ -43,7 +44,7 @@ check_untyped_defs = true
 ignore_missing_imports = true
 
 [tool.ruff]
-src = ["packages/forecasters/src"]
+src = ["packages/forecasters/src", "apps/lineup/src"]
 target-version = "py311"
 line-length = 100
 
