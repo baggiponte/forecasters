@@ -1,0 +1,27 @@
+[build-system]
+requires = ["uv_build>=0.13.4,<0.14"]
+build-backend = "uv_build"
+
+[project]
+name = "forecasters"
+version = "0.1.0"
+description = "A thin adapter layer over pretrained time-series foundation models"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = ["numpy>=1.26", "array-api-compat>=1.9,<2"]
+authors = [{ name = "baggiponte" }]
+keywords = ["time-series", "forecasting", "foundation-models", "quantiles"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Developers",
+  "Intended Audience :: Science/Research",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
+  "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+
+[project.optional-dependencies]
+chronos = ["chronos-forecasting>=2.3,<3"]
