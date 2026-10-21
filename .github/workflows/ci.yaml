@@ -127,3 +127,55 @@ jobs:
           assert "forecasters_lineup/static/widget-entry.js" not in names
           print(f"validated app wheel assets: {wheels[0].name}")
           PY
+
+  notebook:
+    name: marimo host tests and widget assets
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884  # v10.3.0
+        with:
+          version: "0.13.4"
+          python-version: "3.12"
+          enable-cache: true
+          prune-cache: true
+          cache-suffix: notebook
+
+      - name: Install the marimo host with test dependencies
+        run: uv sync --locked --package=forecasters-lineup-marimo --group=dev
+
+      - name: Run AnyWidget comm tests
+        run: uv run --no-sync --package=forecasters-lineup-marimo pytest apps/marimo/tests
+
+      - name: Type-check the marimo host
+        run: uv run --no-sync --package=forecasters-lineup-marimo mypy apps/marimo/src apps/marimo/tests
+
+      - name: Validate the notebook
+        run: uv run --no-sync --package=forecasters-lineup-marimo marimo check apps/marimo/notebook.py
+
+      - name: Check frontend syntax
+        run: |
+          node --check apps/marimo/src/forecasters_lineup_marimo/static/widget-entry.js
+          node --check apps/lineup/src/forecasters_lineup/static/lineup.js
+
+      - name: Build the private widget wheel
+        run: uv build --package=forecasters-lineup-marimo --no-sources --out-dir=dist/marimo
+
+      - name: Verify the widget wheel owns only its entry assets
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import zipfile
+
+          wheels = list(Path("dist/marimo").glob("forecasters_lineup_marimo-*.whl"))
+          assert len(wheels) == 1, wheels
+          with zipfile.ZipFile(wheels[0]) as wheel:
+              names = set(wheel.namelist())
+          assert "forecasters_lineup_marimo/static/widget-entry.js" in names
+          assert not any(name.endswith(("lineup.js", "lineup.css")) for name in names)
+          assert not any("/fonts/" in name for name in names)
+          print(f"validated widget wheel assets: {wheels[0].name}")
+          PY

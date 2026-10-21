@@ -1,11 +1,12 @@
 [tool.uv.workspace]
-members = ["packages/forecasters", "apps/lineup"]
+members = ["packages/forecasters", "apps/lineup", "apps/marimo"]
 
 [tool.uv]
 default-groups = ["dev"]
 
 [tool.uv.sources]
 forecasters = { workspace = true }
+forecasters-lineup = { workspace = true }
 timestral = { git = "https://github.com/mistralai/timestral.git", rev = "a534bdbd244d64f3d9d743f46c7bf6fc330ed4ff" }
 torch = [
   { index = "pytorch-cpu", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
@@ -29,7 +30,7 @@ native = [
 ]
 
 [tool.pytest.ini_options]
-testpaths = ["packages/forecasters/tests", "apps/lineup/tests"]
+testpaths = ["packages/forecasters/tests", "apps/lineup/tests", "apps/marimo/tests"]
 addopts = "-q"
 markers = [
   "native: requires downloaded native SDK checkpoints",
@@ -44,7 +45,7 @@ check_untyped_defs = true
 ignore_missing_imports = true
 
 [tool.ruff]
-src = ["packages/forecasters/src", "apps/lineup/src"]
+src = ["packages/forecasters/src", "apps/lineup/src", "apps/marimo/src"]
 target-version = "py311"
 line-length = 100
 

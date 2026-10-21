@@ -25,4 +25,4 @@ quantiles = model.predict(context, horizon=8, quantile_levels=[0.1, 0.5, 0.9])  
 
 Run `just setup` to install development dependencies and hooks; `just --list` lists the available commands.
 
-[Line-up drawing demo](apps/lineup/README.md).
+[Line-up drawing demo](apps/lineup/README.md) · [marimo notebook](apps/marimo/README.md).

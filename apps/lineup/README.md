@@ -2,7 +2,7 @@
 
 Private local standalone Line-up demo. This distribution is not a release target.
 
-It packages the shared Line-up engine, FastAPI server and static browser renderer used by the standalone app and, in the next stacked change, the marimo AnyWidget host. The engine and assets do not import FastAPI; the `web` extra adds FastAPI, Uvicorn and WebSocket support for the standalone server.
+It packages the shared Line-up engine, FastAPI server and static browser renderer used by the standalone app and the marimo AnyWidget host. The engine and assets do not import FastAPI; the `web` extra adds FastAPI, Uvicorn and WebSocket support for the standalone server.
 
 ![Line-up standalone workspace demo](../../docs/lineup-workspace.png)
 
@@ -55,4 +55,4 @@ The app wheel is only for local inspection:
 uv build --package=forecasters-lineup --no-sources --out-dir=dist/lineup
 ```
 
-It includes the shared static renderer, bundled fonts and their OFL license files. It does not include the marimo notebook or widget entry point; those belong to the next stacked package.
+It includes the shared static renderer, bundled fonts and their OFL license files. It does not include the marimo notebook or widget entry point; those belong to `apps/marimo`.
