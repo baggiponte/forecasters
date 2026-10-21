@@ -1,4 +1,4 @@
-"""Static consumer checks, run with mypy (not collected by pytest)."""
+"""Static consumer checks, run with ty (not collected by pytest)."""
 
 from __future__ import annotations
 
@@ -39,4 +39,4 @@ def check_adapter_typing(
     assert_type(tensor_out, torch.Tensor)
 
     # A Python sequence context is outside the public contract.
-    model.predict([1.0, 2.0], horizon=2)  # type: ignore[call-overload]
+    model.predict([1.0, 2.0], horizon=2)  # ty: ignore[no-matching-overload]

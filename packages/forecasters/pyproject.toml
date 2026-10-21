@@ -26,3 +26,15 @@ chronos = ["chronos-forecasting>=2.3,<3"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/forecasters"]
+
+[tool.ty.environment]
+# Check against the oldest supported interpreter, not the development one.
+python-version = "3.11"
+
+[tool.ty.analysis]
+# Native SDKs are optional extras; their imports are intentionally lazy and untyped here.
+allowed-unresolved-imports = ["chronos", "timestral"]
+
+[tool.ty.src]
+# Match the existing ty consumer scope; Pyrefly owns the shape fixtures.
+include = ["src", "tests/typing_consumer.py"]

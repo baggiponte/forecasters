@@ -7,7 +7,9 @@ changes add the private Line-up and marimo applications under `apps/`.
 ```bash
 uv sync --locked
 uv run --no-sync --package=forecasters pytest packages/forecasters/tests/unit
-uv run --no-sync --package=forecasters mypy packages/forecasters/src packages/forecasters/tests/typing_consumer.py
+uv check --locked --package=forecasters
+uv run --isolated --locked --no-default-groups --group=pyrefly \
+  python packages/forecasters/typecheck/pyrefly/run.py
 prek run --all-files --hook-stage=manual
 ```
 
@@ -20,11 +22,13 @@ Tests are split by boundary:
 
 - `tests/unit/`: input validation and adapters with fake native SDKs.
 - `tests/integration/`: package imports, real-checkpoint parity and the distribution smoke script.
-- `tests/typing_consumer.py`: static checks run by mypy.
+- `tests/typing_consumer.py`: static checks run by ty.
+- `typecheck/pyrefly/`: static shape checks run by Pyrefly.
 
 Paths above are relative to `packages/forecasters/`. Running `pytest` without a path
 collects both suites; native-checkpoint tests remain opt-in. CI shows unit and integration
-tests as separate steps, and runs the smoke script against built distributions.
+tests as separate steps, runs `uv check`, and runs the smoke script against built
+distributions.
 
 For real-checkpoint parity tests, install the optional native SDKs:
 
@@ -36,7 +40,7 @@ FORECASTERS_NATIVE=1 uv run --no-sync --package=forecasters pytest packages/fore
 Tests expect downloaded checkpoints in `.hf-cache/`; installing SDKs does not download weights.
 The default development group already includes Torch for fake-boundary tests.
 
-CI syncs once, runs tests and mypy, then smoke-tests both distributions in isolated
+CI syncs once, runs tests and ty, then smoke-tests both distributions in isolated
 SDK-free environments. It caches uv dependencies and prek environments.
 
 ## Publishing

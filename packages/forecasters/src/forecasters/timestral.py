@@ -10,6 +10,7 @@ import numpy as np
 from numpy.typing import NDArray
 
 from forecasters._deps import import_timestral_forecaster, import_torch
+from forecasters._native import timestral_quantiles
 from forecasters._outputs import numpy_native_context, require_native_tensor, restore_output
 from forecasters._validation import (
     InputSpec,
@@ -159,8 +160,7 @@ class Timestral:
                 f"{self._model_name} native SDK returned shape {tuple(raw.shape)}; "
                 f"expected exactly {expected_shape}"
             )
-        full = raw.detach()[0, 0]
-        selected = full[:, self._median_index] if indices is None else full[:, indices]
+        selected = timestral_quantiles(raw, median_index=self._median_index, indices=indices)
         return cast(
             "NDArray[np.floating[Any]] | torch.Tensor",
             restore_output(selected, spec, model_name=self._model_name),
