@@ -8,7 +8,12 @@ import numpy as np
 import torch
 from numpy.typing import NDArray
 
-from forecasters import ChronosBolt, Forecaster, Timestral
+from forecasters import BaseForecaster, ChronosBolt, Forecaster, Timestral
+
+
+class CustomForecaster(BaseForecaster):
+    def _predict_native(self, context: torch.Tensor, *, horizon: int) -> object:
+        return context[:horizon, None]
 
 
 def check_structural_typing(model: ChronosBolt | Timestral) -> None:
@@ -40,3 +45,12 @@ def check_adapter_typing(
 
     # A Python sequence context is outside the public contract.
     model.predict([1.0, 2.0], horizon=2)  # type: ignore[call-overload]
+
+
+def check_extension_typing(
+    model: CustomForecaster, np64: NDArray[np.float64], tensor: torch.Tensor
+) -> None:
+    forecaster: Forecaster = model
+    check_forecaster(forecaster)
+    assert_type(model.predict(np64, horizon=2), NDArray[np.float64])
+    assert_type(model.predict(tensor, horizon=2, quantile_levels=[0.5]), torch.Tensor)
