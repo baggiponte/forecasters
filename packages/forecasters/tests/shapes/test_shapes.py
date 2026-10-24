@@ -1,7 +1,13 @@
-"""Check the public shape fixtures with Pyrefly.
+"""Check the public tensor-shape contracts with Pyrefly.
 
-Negative fixtures must emit exactly the diagnostics marked by EXPECT comments;
-otherwise a lost shape check could silently pass CI.
+Positive fixtures must infer every asserted shape with no diagnostics. Negative fixtures
+must emit exactly the diagnostics marked by EXPECT comments; otherwise a lost shape check
+could silently pass CI.
+
+Pyrefly lives in the isolated `pyrefly` dependency group, so these tests skip everywhere
+else. Run them with:
+
+    uv run --isolated --locked --no-default-groups --group=pyrefly pytest packages/forecasters/tests/shapes
 """
 
 from __future__ import annotations
@@ -13,42 +19,45 @@ import sys
 from pathlib import Path
 from typing import Any
 
-ROOT = Path(__file__).resolve().parent
-FIXTURES = ROOT / "fixtures"
-PUBLIC_CONFIG = ROOT / "pyrefly.toml"
+import pytest
+
+SHAPES = Path(__file__).resolve().parent
+CONFIG = SHAPES / "pyrefly.toml"
+POSITIVE = SHAPES / "fixtures" / "positive.py"
+NEGATIVE = SHAPES / "fixtures" / "negative.py"
 EXPECT_PREFIX = "# EXPECT:"
-INSTALL_HINT = (
-    "pyrefly is not installed. Run this script in the isolated checker environment:\n"
-    "  uv run --isolated --locked --no-default-groups --group=pyrefly "
-    "python packages/forecasters/typecheck/pyrefly/run.py"
-)
+
+pytestmark = [
+    pytest.mark.skipif(
+        sys.version_info < (3, 12),
+        reason="pyrefly-numpy-stubs requires Python 3.12+; the library itself supports 3.11",
+    ),
+    pytest.mark.skipif(
+        shutil.which("pyrefly") is None,
+        reason="pyrefly is installed only in the isolated `pyrefly` dependency group",
+    ),
+]
 
 
-def _run(
-    source: Path, config: Path
-) -> tuple[subprocess.CompletedProcess[str], list[dict[str, Any]]]:
-    executable = shutil.which("pyrefly")
-    if executable is None:
-        raise SystemExit(INSTALL_HINT)
-
+def _run(source: Path) -> tuple[subprocess.CompletedProcess[str], list[dict[str, Any]]]:
     result = subprocess.run(
         [
-            executable,
+            shutil.which("pyrefly"),
             "check",
             "--config",
-            str(config),
+            str(CONFIG),
             "--output-format",
             "json",
             str(source),
         ],
-        cwd=ROOT,
+        cwd=SHAPES,
         check=False,
         capture_output=True,
         text=True,
     )
     start = result.stdout.find("{")
     if start == -1:
-        raise SystemExit(
+        pytest.fail(
             f"Pyrefly produced no JSON report for {source.name}.\n"
             f"stdout:\n{result.stdout}\nstderr:\n{result.stderr}"
         )
@@ -58,16 +67,6 @@ def _run(
 
 def _diagnostics(result: subprocess.CompletedProcess[str]) -> str:
     return f"stdout:\n{result.stdout}\nstderr:\n{result.stderr}"
-
-
-def check_positive() -> None:
-    fixture = FIXTURES / "positive.py"
-    result, errors = _run(fixture, PUBLIC_CONFIG)
-    if result.returncode != 0 or errors:
-        raise SystemExit(
-            f"Positive shape fixtures failed ({len(errors)} diagnostics).\n" + _diagnostics(result)
-        )
-    print(f"positive: {fixture.name} inferred all asserted shapes")
 
 
 def _expected_errors(fixture: Path) -> dict[int, str]:
@@ -84,17 +83,24 @@ def _expected_errors(fixture: Path) -> dict[int, str]:
         code_before_comment = line.split(EXPECT_PREFIX, 1)[0].strip()
         target = number if code_before_comment else number + 1
         if target in expected:
-            raise SystemExit(f"{fixture.name}: duplicate expectation for line {target}")
+            pytest.fail(f"{fixture.name}: duplicate expectation for line {target}")
         expected[target] = kind
     if not expected:
-        raise SystemExit(f"{fixture.name} declares no EXPECT comments")
+        pytest.fail(f"{fixture.name} declares no EXPECT comments")
     return expected
 
 
-def check_negative() -> None:
-    fixture = FIXTURES / "negative.py"
-    result, errors = _run(fixture, PUBLIC_CONFIG)
-    expected = _expected_errors(fixture)
+def test_positive_fixture_infers_all_asserted_shapes() -> None:
+    result, errors = _run(POSITIVE)
+
+    assert result.returncode == 0 and not errors, (
+        f"Positive shape fixtures failed ({len(errors)} diagnostics).\n" + _diagnostics(result)
+    )
+
+
+def test_negative_fixture_reports_exactly_the_expected_errors() -> None:
+    result, errors = _run(NEGATIVE)
+    expected = _expected_errors(NEGATIVE)
 
     actual: dict[int, list[str]] = {}
     for error in errors:
@@ -114,22 +120,10 @@ def check_negative() -> None:
 
     if result.returncode == 0:
         problems.append("Pyrefly exited successfully although the negative fixture has errors")
-    if problems:
-        raise SystemExit(
-            "Negative shape fixtures did not match their expectations:\n  "
-            + "\n  ".join(problems)
-            + "\n"
-            + _diagnostics(result)
-        )
 
-    print(f"negative: {fixture.name} produced {len(expected)} expected static errors")
-
-
-if __name__ == "__main__":
-    if sys.version_info < (3, 12):
-        raise SystemExit(
-            "Pyrefly shape fixtures require Python 3.12+ because pyrefly-numpy-stubs "
-            "requires it; the library itself still supports Python 3.11+."
-        )
-    check_positive()
-    check_negative()
+    assert not problems, (
+        "Negative shape fixtures did not match their expectations:\n  "
+        + "\n  ".join(problems)
+        + "\n"
+        + _diagnostics(result)
+    )

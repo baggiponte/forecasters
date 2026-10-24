@@ -1,8 +1,8 @@
 """Intentional static failures for the Pyrefly tensor-shape overlay.
 
 Not executed. Each EXPECT comment names the error kind that must be reported on the
-following line, and no other errors may appear. ``run.py`` fails if an expected error
-disappears.
+following line, and no other errors may appear. ``test_shapes.py`` fails if an expected
+error disappears.
 """
 
 from __future__ import annotations

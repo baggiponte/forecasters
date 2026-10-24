@@ -41,6 +41,7 @@ pyrefly = [
     { name = "pyrefly", specifier = "==1.4.0" },
     { name = "pyrefly-numpy-stubs", marker = "python_full_version >= '3.12'", specifier = "==1.4.0" },
     { name = "pyrefly-torch-stubs", specifier = "==1.4.0" },
+    { name = "pytest", specifier = ">=8.0" },
 ]
 
 [[package]]

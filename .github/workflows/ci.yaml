@@ -91,4 +91,4 @@ jobs:
       - name: Check inferred predict shapes with Pyrefly
         run: >-
           uv run --isolated --locked --no-default-groups --group=pyrefly
-          python packages/forecasters/typecheck/pyrefly/run.py
+          pytest packages/forecasters/tests/shapes
