@@ -33,6 +33,9 @@ jobs:
           path: ~/.cache/prek
           key: prek-${{ runner.os }}-py3.12-0.5.6-${{ hashFiles('.pre-commit-config.yaml') }}
 
+      - name: Install development environment
+        run: uv sync --locked
+
       - name: Run the same checks as local pre-commit, plus full-history secret scanning
         run: uvx --from=prek==0.5.6 prek run --all-files --hook-stage=manual --show-diff-on-failure
 
