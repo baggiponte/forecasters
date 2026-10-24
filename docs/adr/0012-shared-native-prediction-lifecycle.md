@@ -14,7 +14,7 @@ The two native adapters repeat request validation, checkpoint limits, conversion
 
 Introduce an optional public `BaseForecaster` for native Torch quantile models. Its typed, final `predict` sequences the existing shared behavior. A concrete adapter declares checkpoint metadata, native dtype and axis layout, and implements `_predict_native` to call its SDK and extract the raw quantile tensor. Exact native shape checking happens centrally before normalization. Keep `Forecaster` structural and preserve existing native-object constructors and model-specific `from_pretrained` factories.
 
-Prefer this explicit template method over decorators, automatic subclass wrapping and composed forwarding objects. A canonical `(H, Q)` hook is a credible alternative, but cannot enforce the original native shape after a concrete adapter has reshaped it. Axis labels express the two demonstrated SDK layouts without a registry or model-name dispatch. See [the design comparison and authoring guide](../adapter-design.md).
+Prefer this explicit template method over decorators, automatic subclass wrapping and composed forwarding objects. A canonical `(H, Q)` hook is a credible alternative, but cannot enforce the original native shape after a concrete adapter has reshaped it. Axis labels express the two demonstrated SDK layouts without a registry or model-name dispatch.
 
 ## Consequences
 
