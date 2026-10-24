@@ -10,7 +10,6 @@ from typing import TYPE_CHECKING, Any, Literal, cast
 
 import numpy as np
 from array_api_compat import array_namespace, device, is_numpy_array, is_torch_array
-from numpy.typing import NDArray
 
 if TYPE_CHECKING:
     import torch
@@ -30,7 +29,7 @@ class InputSpec:
 
 def validate_context(context: object) -> InputSpec:
     if is_numpy_array(context):
-        array = cast(NDArray[Any], context)
+        array = context
         if array.ndim != 1:
             raise ValueError(f"context must be one-dimensional; got shape {tuple(array.shape)}")
         if array.shape[0] == 0:

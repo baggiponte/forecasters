@@ -1,0 +1,10 @@
+# Checker-only configuration for the experimental Pyrefly tensor-shape fixtures.
+#
+# This must run in the isolated `pyrefly` dependency group: the shape-aware NumPy/Torch
+# stub packages overlay the real libraries and conflict with ty.
+project-includes = ["fixtures/positive.py"]
+project-excludes = ["fixtures/negative.py"]
+search-path = ["stubs"]
+python-version = "3.12"
+preset = "default"
+required-version = "==1.4.0"

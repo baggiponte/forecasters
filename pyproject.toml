@@ -19,8 +19,19 @@ explicit = true
 [dependency-groups]
 dev = [
   "pytest>=8.0",
-  "mypy>=1.9",
   "torch>=2.3",
+  "ty>=0.0.90",
+  # Checker-only primitives for the real native-helper shape annotations. Imported only
+  # under TYPE_CHECKING; it is not a runtime dependency.
+  "pyrefly-shape-extensions==1.4.0",
+]
+# Isolated Pyrefly environment for experimental shape-aware stubs. Never install this
+# group into the development environment: the NumPy/Torch stub packages overlay the real
+# libraries' typing and conflict with ty.
+pyrefly = [
+  "pyrefly==1.4.0",
+  "pyrefly-numpy-stubs==1.4.0; python_full_version >= '3.12'",
+  "pyrefly-torch-stubs==1.4.0",
 ]
 native = [
   "forecasters[chronos]",
@@ -35,20 +46,23 @@ markers = [
   "backend: requires the optional PyTorch test backend",
 ]
 
-[tool.mypy]
-files = ["packages/forecasters/src", "packages/forecasters/tests/typing_consumer.py"]
-python_version = "3.12"
-warn_unused_ignores = true
-check_untyped_defs = true
-ignore_missing_imports = true
-
 [tool.ruff]
 src = ["packages/forecasters/src"]
 target-version = "py311"
 line-length = 100
+# Pyrefly stubs use 3.12-only PEP 695 shape syntax. Lint them with their own target.
+per-file-target-version = { "packages/forecasters/typecheck/pyrefly/stubs/**/*.pyi" = "py312" }
+
+[tool.ruff.format]
+# The negative fixture's line-to-expectation mapping is intentional; keep its layout.
+exclude = ["packages/forecasters/typecheck/pyrefly/fixtures/negative.py"]
 
 [tool.ruff.lint]
 extend-select = ["I"]
+
+[tool.ruff.lint.per-file-ignores]
+# Assigning to the annotated variable is the intentional type failure.
+"packages/forecasters/typecheck/pyrefly/fixtures/negative.py" = ["F841"]
 
 [tool.mdformat]
 wrap = "no"
