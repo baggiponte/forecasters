@@ -2,49 +2,30 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, TypeVar, cast, overload
+from typing import TYPE_CHECKING, Any
 
-import numpy as np
-from numpy.typing import NDArray
-
+from forecasters._base import BaseForecaster
 from forecasters._deps import import_chronos_pipeline, import_torch
-from forecasters._outputs import numpy_native_context, require_native_tensor, restore_output
-from forecasters._validation import (
-    InputSpec,
-    median_index,
-    validate_context,
-    validate_horizon,
-    validate_quantile_levels,
-)
 
 if TYPE_CHECKING:
     import torch
 
-_FloatDType = TypeVar("_FloatDType", bound=np.floating[Any])
-
 _DEFAULT_CHECKPOINT = "amazon/chronos-bolt-tiny"
 
 
-class ChronosBolt:
+class ChronosBolt(BaseForecaster):
     """A loaded Chronos-Bolt checkpoint."""
-
-    _pipeline: Any
-    _model_name: str
-    supported_quantile_levels: tuple[float, ...]
-    max_context_length: int
-    max_horizon: int
-    _median_index: int
 
     def __init__(self, native: Any, *, model_name: str) -> None:
         self._pipeline = native
-        self._model_name = model_name
-        self.supported_quantile_levels = tuple(float(level) for level in native.quantiles)
-        self.max_context_length = int(native.model_context_length)
-        self.max_horizon = int(native.model_prediction_length)
-        self._median_index = median_index(
-            self.supported_quantile_levels, model_name=self._model_name
+        super().__init__(
+            model_name=model_name,
+            supported_quantile_levels=native.quantiles,
+            max_context_length=native.model_context_length,
+            max_horizon=native.model_prediction_length,
+            native_layout=("batch", "quantile", "horizon"),
+            native_dtype=import_torch().float32,
         )
 
     @classmethod
@@ -68,80 +49,9 @@ class ChronosBolt:
         pipeline.model.to(device)
         return cls(pipeline, model_name=model_name)
 
-    @overload
-    def predict(
-        self,
-        context: NDArray[_FloatDType],
-        *,
-        horizon: int,
-        quantile_levels: Sequence[float] | None = None,
-    ) -> NDArray[_FloatDType]: ...
-
-    @overload
-    def predict(
-        self,
-        context: torch.Tensor,
-        *,
-        horizon: int,
-        quantile_levels: Sequence[float] | None = None,
-    ) -> torch.Tensor: ...
-
-    def predict(
-        self,
-        context: NDArray[np.floating[Any]] | torch.Tensor,
-        *,
-        horizon: int,
-        quantile_levels: Sequence[float] | None = None,
-    ) -> NDArray[np.floating[Any]] | torch.Tensor:
-        """Return the native median (H,) or requested quantiles (H, Q)."""
-        context_spec: InputSpec = validate_context(context)
-        horizon = validate_horizon(horizon)
-
-        if context.shape[-1] > self.max_context_length:
-            raise ValueError(
-                f"context length {context.shape[-1]} exceeds {self._model_name}'s supported "
-                f"maximum of {self.max_context_length}"
-            )
-        if horizon > self.max_horizon:
-            raise ValueError(
-                f"horizon {horizon} exceeds {self._model_name}'s native maximum of {self.max_horizon}"
-            )
-
-        quantile_indices = validate_quantile_levels(
-            quantile_levels,
-            self.supported_quantile_levels,
-            model_name=self._model_name,
-        )
-
-        torch_module = import_torch()
-        if context_spec.family == "numpy":
-            native_values = numpy_native_context(cast(NDArray[Any], context))
-            native_context = torch_module.as_tensor(native_values, dtype=torch_module.float32)
-        else:
-            native_context = torch_module.as_tensor(context, dtype=torch_module.float32)
-
-        native_output = require_native_tensor(
-            self._pipeline.predict(
-                native_context,
-                prediction_length=horizon,
-                limit_prediction_length=True,
-            ),
-            model_name=self._model_name,
-        )
-        # Chronos-Bolt returns exactly (batch=1, loaded quantile grid, horizon).
-        expected_shape = (1, len(self.supported_quantile_levels), horizon)
-        if tuple(native_output.shape) != expected_shape:
-            raise RuntimeError(
-                f"{self._model_name} native SDK returned shape {tuple(native_output.shape)}; "
-                f"expected exactly {expected_shape}"
-            )
-        native_quantiles = native_output.detach()[0].transpose(0, 1)
-        selected_forecast = (
-            native_quantiles[:, self._median_index]
-            if quantile_indices is None
-            else native_quantiles[:, quantile_indices]
-        )
-        return cast(
-            "NDArray[np.floating[Any]] | torch.Tensor",
-            restore_output(selected_forecast, context_spec, model_name=self._model_name),
+    def _predict_native(self, context: torch.Tensor, *, horizon: int) -> object:
+        return self._pipeline.predict(
+            context,
+            prediction_length=horizon,
+            limit_prediction_length=True,
         )
