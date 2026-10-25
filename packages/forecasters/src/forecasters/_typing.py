@@ -6,4 +6,4 @@ import numpy as np
 
 # Numeric NumPy scalars only: excludes bool_, str_, bytes_, object_, datetime64 and void.
 # timedelta64 subclasses signedinteger, so it is still accepted; the SDK rejects it at runtime.
-ScalarT = TypeVar("ScalarT", bound=np.number)
+DTypeT = TypeVar("DTypeT", bound=np.number)

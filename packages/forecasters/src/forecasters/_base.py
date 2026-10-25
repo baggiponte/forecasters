@@ -27,7 +27,7 @@ if TYPE_CHECKING:
     import numpy.typing as npt
     import torch
 
-    from forecasters._typing import ScalarT
+    from forecasters._typing import DTypeT
 
 
 class BaseForecaster(ABC):
@@ -65,20 +65,20 @@ class BaseForecaster(ABC):
     @overload
     def predict(
         self,
-        context: npt.NDArray[ScalarT],
+        context: npt.NDArray[DTypeT],
         *,
         horizon: int,
         quantile_levels: None = None,
-    ) -> np.ndarray[tuple[int], np.dtype[ScalarT]]: ...
+    ) -> np.ndarray[tuple[int], np.dtype[DTypeT]]: ...
 
     @overload
     def predict(
         self,
-        context: npt.NDArray[ScalarT],
+        context: npt.NDArray[DTypeT],
         *,
         horizon: int,
         quantile_levels: Sequence[float],
-    ) -> np.ndarray[tuple[int, int], np.dtype[ScalarT]]: ...
+    ) -> np.ndarray[tuple[int, int], np.dtype[DTypeT]]: ...
 
     @overload
     def predict(
