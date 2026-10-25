@@ -35,5 +35,5 @@ python-version = "3.11"
 allowed-unresolved-imports = ["chronos", "timestral"]
 
 [tool.ty.src]
-# Match the existing ty consumer scope; Pyrefly owns the shape fixtures.
+# Library sources and the static consumer checks.
 include = ["src", "tests/typing_consumer.py"]
