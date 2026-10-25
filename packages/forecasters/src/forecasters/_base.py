@@ -3,15 +3,14 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Any, TypeVar, cast, final, overload
-
-import numpy as np
+from typing import TYPE_CHECKING, final, overload
 
 from forecasters._outputs import (
     NativeLayout,
     normalize_native_quantiles,
+    require_native_tensor,
     restore_output,
-    to_native_context,
+    to_torch_context,
     validate_native_layout,
 )
 from forecasters._validation import (
@@ -24,10 +23,11 @@ from forecasters._validation import (
 if TYPE_CHECKING:
     from collections.abc import Iterable, Sequence
 
+    import numpy as np
+    import numpy.typing as npt
     import torch
-    from numpy.typing import NDArray
 
-_FloatDType = TypeVar("_FloatDType", bound=np.floating[Any])
+    from forecasters._typing import ScalarT
 
 
 class BaseForecaster(ABC):
@@ -65,11 +65,20 @@ class BaseForecaster(ABC):
     @overload
     def predict(
         self,
-        context: NDArray[_FloatDType],
+        context: npt.NDArray[ScalarT],
         *,
         horizon: int,
-        quantile_levels: Sequence[float] | None = None,
-    ) -> NDArray[_FloatDType]: ...
+        quantile_levels: None = None,
+    ) -> np.ndarray[tuple[int], np.dtype[ScalarT]]: ...
+
+    @overload
+    def predict(
+        self,
+        context: npt.NDArray[ScalarT],
+        *,
+        horizon: int,
+        quantile_levels: Sequence[float],
+    ) -> np.ndarray[tuple[int, int], np.dtype[ScalarT]]: ...
 
     @overload
     def predict(
@@ -83,11 +92,11 @@ class BaseForecaster(ABC):
     @final
     def predict(
         self,
-        context: NDArray[np.floating[Any]] | torch.Tensor,
+        context: npt.NDArray[np.generic] | torch.Tensor,
         *,
         horizon: int,
         quantile_levels: Sequence[float] | None = None,
-    ) -> NDArray[np.floating[Any]] | torch.Tensor:
+    ) -> npt.NDArray[np.generic] | torch.Tensor:
         """Return the native median (H,) or requested quantiles (H, Q).
 
         Preserve the caller's array family, floating dtype and Torch device.
@@ -109,8 +118,10 @@ class BaseForecaster(ABC):
             quantile_levels, self.supported_quantile_levels, model_name=self._model_name
         )
 
-        native_context = to_native_context(context, context_spec, dtype=self._native_dtype)
-        raw = self._predict_native(native_context, horizon=horizon)
+        native_context = to_torch_context(context, dtype=self._native_dtype)
+        raw = require_native_tensor(
+            self._predict_native(native_context, horizon=horizon), model_name=self._model_name
+        )
         quantiles = normalize_native_quantiles(
             raw,
             layout=self._native_layout,
@@ -119,10 +130,7 @@ class BaseForecaster(ABC):
             model_name=self._model_name,
         )
         selected = quantiles[:, self._median_index] if indices is None else quantiles[:, indices]
-        return cast(
-            "NDArray[np.floating[Any]] | torch.Tensor",
-            restore_output(selected, context_spec, model_name=self._model_name),
-        )
+        return restore_output(selected, context_spec, model_name=self._model_name)
 
     @abstractmethod
     def _predict_native(self, context: torch.Tensor, *, horizon: int) -> object:

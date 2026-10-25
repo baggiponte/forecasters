@@ -2,17 +2,16 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Protocol, TypeVar, overload
-
-import numpy as np
+from typing import TYPE_CHECKING, Protocol, overload
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
+    import numpy as np
+    import numpy.typing as npt
     import torch
-    from numpy.typing import NDArray
 
-_FloatDType = TypeVar("_FloatDType", bound=np.floating[Any])
+    from forecasters._typing import ScalarT
 
 
 class Forecaster(Protocol):
@@ -36,11 +35,20 @@ class Forecaster(Protocol):
     @overload
     def predict(
         self,
-        context: NDArray[_FloatDType],
+        context: npt.NDArray[ScalarT],
         *,
         horizon: int,
-        quantile_levels: Sequence[float] | None = None,
-    ) -> NDArray[_FloatDType]: ...
+        quantile_levels: None = None,
+    ) -> np.ndarray[tuple[int], np.dtype[ScalarT]]: ...
+
+    @overload
+    def predict(
+        self,
+        context: npt.NDArray[ScalarT],
+        *,
+        horizon: int,
+        quantile_levels: Sequence[float],
+    ) -> np.ndarray[tuple[int, int], np.dtype[ScalarT]]: ...
 
     @overload
     def predict(
@@ -53,10 +61,10 @@ class Forecaster(Protocol):
 
     def predict(
         self,
-        context: NDArray[np.floating[Any]] | torch.Tensor,
+        context: npt.NDArray[np.generic] | torch.Tensor,
         *,
         horizon: int,
         quantile_levels: Sequence[float] | None = None,
-    ) -> NDArray[np.floating[Any]] | torch.Tensor:
+    ) -> npt.NDArray[np.generic] | torch.Tensor:
         """Forecast ``horizon`` steps after a one-dimensional floating context."""
         ...

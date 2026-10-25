@@ -6,9 +6,9 @@ import warnings
 from typing import TYPE_CHECKING, Any, Literal, cast
 
 import numpy as np
+import numpy.typing as npt
 from array_api_compat import array_namespace, is_torch_array
-
-from forecasters._deps import import_torch
+from typing_extensions import TypeIs
 
 if TYPE_CHECKING:
     import torch
@@ -16,6 +16,10 @@ if TYPE_CHECKING:
     from forecasters._validation import InputSpec
 
 NativeLayout = tuple[Literal["batch", "variate", "horizon", "quantile"], ...]
+
+
+def _is_tensor(values: object) -> TypeIs[torch.Tensor]:
+    return is_torch_array(values)
 
 
 def validate_native_layout(layout: NativeLayout) -> NativeLayout:
@@ -32,7 +36,7 @@ def validate_native_layout(layout: NativeLayout) -> NativeLayout:
     return tuple(layout)
 
 
-def numpy_native_context(context: np.ndarray) -> np.ndarray:
+def numpy_to_torch_safe(context: npt.NDArray[np.generic]) -> npt.NDArray[np.generic]:
     """Make a NumPy context safe for the SDK's Torch bridge without mutating the caller."""
     array = np.ascontiguousarray(context)
     if not array.flags.writeable:
@@ -48,20 +52,19 @@ def numpy_native_context(context: np.ndarray) -> np.ndarray:
     return array
 
 
-def to_native_context(
-    context: object, context_spec: InputSpec, *, dtype: torch.dtype | None
+def to_torch_context(
+    context: npt.NDArray[np.generic] | torch.Tensor, *, dtype: torch.dtype | None
 ) -> torch.Tensor:
     """Bridge a validated context to Torch using the SDK's requested compute dtype."""
-    values = (
-        numpy_native_context(cast("np.ndarray", context))
-        if context_spec.family == "numpy"
-        else context
-    )
-    return cast("torch.Tensor", import_torch().as_tensor(values, dtype=dtype))
+    import torch
+
+    if isinstance(context, np.ndarray):
+        return torch.as_tensor(numpy_to_torch_safe(context), dtype=dtype)
+    return torch.as_tensor(context, dtype=dtype)
 
 
 def require_native_tensor(values: object, *, model_name: str) -> torch.Tensor:
-    if not is_torch_array(values):
+    if not _is_tensor(values):
         raise RuntimeError(
             f"{model_name} native SDK returned {type(values).__name__}; expected a torch.Tensor"
         )
@@ -69,7 +72,7 @@ def require_native_tensor(values: object, *, model_name: str) -> torch.Tensor:
 
 
 def normalize_native_quantiles(
-    values: object,
+    tensor: torch.Tensor,
     *,
     layout: NativeLayout,
     horizon: int,
@@ -77,7 +80,6 @@ def normalize_native_quantiles(
     model_name: str,
 ) -> torch.Tensor:
     """Check the complete SDK tensor before normalizing its axes to (H, Q)."""
-    tensor = require_native_tensor(values, model_name=model_name)
     sizes = {"horizon": horizon, "quantile": quantile_count, "batch": 1, "variate": 1}
     expected_shape = tuple(sizes[axis] for axis in layout)
     if tuple(tensor.shape) != expected_shape:
@@ -98,12 +100,16 @@ def _all_finite(values: object) -> bool:
     return bool(xp.all(xp.isfinite(values)))
 
 
-def restore_output(values: torch.Tensor, context_spec: InputSpec, *, model_name: str) -> object:
+def restore_output(
+    values: torch.Tensor, context_spec: InputSpec, *, model_name: str
+) -> npt.NDArray[np.generic] | torch.Tensor:
     """Validate selected values, then restore the caller's family, dtype and device."""
+    import torch
+
     if not _all_finite(values):
         raise RuntimeError(f"{model_name} native SDK returned non-finite selected forecast values")
 
-    restored: object
+    restored: npt.NDArray[np.generic] | torch.Tensor
     if context_spec.family == "torch":
         restored = values.detach().to(
             device=context_spec.device,
@@ -113,7 +119,7 @@ def restore_output(values: torch.Tensor, context_spec: InputSpec, *, model_name:
     else:
         cpu_values = values.detach().to(device="cpu")
         # NumPy has no bfloat16 dtype; widening to float32 preserves every value.
-        if cpu_values.dtype == import_torch().bfloat16:
+        if cpu_values.dtype == torch.bfloat16:
             cpu_values = cpu_values.float()
         array = cpu_values.numpy()
         with warnings.catch_warnings():

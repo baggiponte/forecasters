@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from forecasters._base import BaseForecaster
-from forecasters._deps import import_chronos_pipeline, import_torch
+from forecasters._deps import import_chronos_pipeline
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -19,6 +19,8 @@ class ChronosBolt(BaseForecaster):
     """A loaded Chronos-Bolt checkpoint."""
 
     def __init__(self, native: Any, *, model_name: str) -> None:
+        import torch
+
         self._pipeline = native
         super().__init__(
             model_name=model_name,
@@ -26,7 +28,7 @@ class ChronosBolt(BaseForecaster):
             max_context_length=native.model_context_length,
             max_horizon=native.model_prediction_length,
             native_layout=("batch", "quantile", "horizon"),
-            native_dtype=import_torch().float32,
+            native_dtype=torch.float32,
         )
 
     @classmethod

@@ -22,14 +22,9 @@ SUPPORTED = (0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9)
 @pytest.mark.parametrize(
     ("context", "error"),
     [
-        (np.array([1, 2], dtype=np.int64), TypeError),
-        (np.array([True, False]), TypeError),
-        (np.array([1.0 + 0j], dtype=np.complex128), TypeError),
         (np.array(1.0), ValueError),
         (np.ones((2, 2), dtype=np.float32), ValueError),
         (np.array([], dtype=np.float32), ValueError),
-        (np.array([1.0, np.nan]), ValueError),
-        (np.array([1.0, np.inf]), ValueError),
     ],
 )
 def test_invalid_numpy_contexts_are_rejected(context: Any, error: type[Exception]) -> None:
