@@ -1,4 +1,8 @@
-"""Pyrefly-only public API overlay; keep signatures aligned with the runtime classes."""
+"""Pyrefly-only public API overlay for the fixtures; not shipped in the wheel.
+
+This file and _predict.pyi are hand-written copies of the runtime classes. Keep them
+aligned: test_shape_overlay.py fails when predict parameters drift from the runtime.
+"""
 
 from pathlib import Path
 from typing import Any, Protocol
