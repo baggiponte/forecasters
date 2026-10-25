@@ -64,7 +64,7 @@ def require_native_tensor(values: object, *, model_name: str) -> torch.Tensor:
         raise RuntimeError(
             f"{model_name} native SDK returned {type(values).__name__}; expected a torch.Tensor"
         )
-    return cast("torch.Tensor", values)
+    return values
 
 
 def normalize_native_quantiles(
@@ -105,7 +105,7 @@ def restore_output(values: torch.Tensor, context_spec: InputSpec, *, model_name:
     restored: object
     if context_spec.family == "torch":
         restored = values.detach().to(
-            device=cast("str | torch.device | None", context_spec.device),
+            device=context_spec.device,
             dtype=cast("torch.dtype", context_spec.dtype),
         )
         destination = f"device {context_spec.device}"
