@@ -2,13 +2,18 @@
 
 from __future__ import annotations
 
+import sys
 import warnings
 from typing import TYPE_CHECKING, Any, Literal, cast
 
 import numpy as np
 import numpy.typing as npt
 from array_api_compat import array_namespace, is_torch_array
-from typing_extensions import TypeIs
+
+if sys.version_info >= (3, 13):
+    from typing import TypeIs
+else:
+    from typing_extensions import TypeIs
 
 if TYPE_CHECKING:
     import torch
