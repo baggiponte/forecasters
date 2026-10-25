@@ -36,6 +36,7 @@ def check_adapter_typing(
     np32: NDArray[np.float32],
     npld: NDArray[np.longdouble],
     nps: NDArray[np.str_],
+    nbool: NDArray[np.bool_],
     tensor: torch.Tensor,
 ) -> None:
     median64 = model.predict(np64, horizon=2)
@@ -54,6 +55,9 @@ def check_adapter_typing(
 
     # String arrays are not numeric and fail the dtype bound.
     model.predict(nps, horizon=2)  # ty: ignore[no-matching-overload]
+
+    # Boolean arrays are not numeric and fail the dtype bound.
+    model.predict(nbool, horizon=2)  # ty: ignore[no-matching-overload]
 
 
 def check_extension_typing(
