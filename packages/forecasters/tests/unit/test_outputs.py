@@ -61,7 +61,7 @@ def test_restores_accelerator_device_when_available() -> None:
 
 def test_rejects_nonfinite_selected_values() -> None:
     spec = InputSpec(family="numpy", dtype=np.dtype(np.float64), device=None)
-    with pytest.raises(RuntimeError, match="test/checkpoint.*non-finite selected"):
+    with pytest.raises(RuntimeError, match=r"test/checkpoint.*non-finite selected"):
         restore_output(torch.tensor([torch.nan]), spec, model_name="test/checkpoint")
 
 
@@ -79,5 +79,5 @@ def test_rejects_overflow_in_destination_dtype(spec: InputSpec) -> None:
 
 
 def test_native_output_must_be_a_tensor() -> None:
-    with pytest.raises(RuntimeError, match="test/checkpoint.*expected a torch.Tensor"):
+    with pytest.raises(RuntimeError, match=r"test/checkpoint.*expected a torch.Tensor"):
         require_native_tensor(np.ones(3), model_name="test/checkpoint")

@@ -116,7 +116,7 @@ def test_new_adapter_rejects_invalid_requests_before_sdk(context, horizon, level
 @pytest.mark.parametrize("output", [np.ones((4, 3)), torch.ones(3, 4), torch.ones(1, 4, 3)])
 def test_new_adapter_cannot_silently_reshape_malformed_output(output) -> None:
     model = ExampleForecaster(Mock(return_value=output))
-    with pytest.raises(RuntimeError, match="example/checkpoint.*expected"):
+    with pytest.raises(RuntimeError, match=r"example/checkpoint.*expected"):
         model.predict(np.ones(2), horizon=4)
 
 

@@ -3,11 +3,9 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from collections.abc import Iterable, Sequence
 from typing import TYPE_CHECKING, Any, TypeVar, cast, final, overload
 
 import numpy as np
-from numpy.typing import NDArray
 
 from forecasters._outputs import (
     NativeLayout,
@@ -24,7 +22,10 @@ from forecasters._validation import (
 )
 
 if TYPE_CHECKING:
+    from collections.abc import Iterable, Sequence
+
     import torch
+    from numpy.typing import NDArray
 
 _FloatDType = TypeVar("_FloatDType", bound=np.floating[Any])
 

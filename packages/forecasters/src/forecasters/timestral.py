@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from forecasters._base import BaseForecaster
 from forecasters._deps import import_timestral_forecaster
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     import torch
 
 _DEFAULT_CHECKPOINT = "mistralai/Timestral-5M"

@@ -83,7 +83,7 @@ def test_quantile_failures_identify_model_and_levels() -> None:
 
 
 def test_checkpoint_requires_a_native_median() -> None:
-    with pytest.raises(RuntimeError, match="fake/checkpoint.*native 0.5 quantile"):
+    with pytest.raises(RuntimeError, match=r"fake/checkpoint.*native 0.5 quantile"):
         median_index((0.1, 0.9), model_name="fake/checkpoint")
 
 
