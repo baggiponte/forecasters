@@ -6,7 +6,7 @@ import math
 import numbers
 from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Literal, cast
+from typing import TYPE_CHECKING, Any, Literal
 
 from array_api_compat import device, is_numpy_array, is_torch_array
 
@@ -19,12 +19,23 @@ _NATIVE_LEVEL_ABS_TOL = 1e-7
 
 
 @dataclass(frozen=True)
-class InputSpec:
-    """Validated context metadata used to restore the caller's representation."""
+class NumpySpec:
+    """Validated NumPy context metadata used to restore the caller's representation."""
 
-    family: Literal["numpy", "torch"]
-    dtype: np.dtype[Any] | torch.dtype
-    device: str | torch.device | None
+    family: Literal["numpy"]
+    dtype: np.dtype[Any]
+
+
+@dataclass(frozen=True)
+class TorchSpec:
+    """Validated Torch context metadata used to restore the caller's representation."""
+
+    family: Literal["torch"]
+    dtype: torch.dtype
+    device: torch.device | str
+
+
+InputSpec = NumpySpec | TorchSpec
 
 
 def validate_context(context: object) -> InputSpec:
@@ -34,15 +45,15 @@ def validate_context(context: object) -> InputSpec:
             raise ValueError(f"context must be one-dimensional; got shape {tuple(array.shape)}")
         if array.shape[0] == 0:
             raise ValueError("context must contain at least one observation")
-        return InputSpec(family="numpy", dtype=array.dtype, device=None)
+        return NumpySpec(family="numpy", dtype=array.dtype)
 
     if is_torch_array(context):
-        tensor = cast("torch.Tensor", context)
+        tensor = context
         if tensor.ndim != 1:
             raise ValueError(f"context must be one-dimensional; got shape {tuple(tensor.shape)}")
         if tensor.shape[0] == 0:
             raise ValueError("context must contain at least one observation")
-        return InputSpec(family="torch", dtype=tensor.dtype, device=device(tensor))
+        return TorchSpec(family="torch", dtype=tensor.dtype, device=device(tensor))
 
     raise TypeError(
         "context must be a NumPy ndarray or PyTorch Tensor; "

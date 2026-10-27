@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import sys
 import warnings
-from typing import TYPE_CHECKING, Any, Literal, cast
+from typing import TYPE_CHECKING, Literal
 
 import numpy as np
 import numpy.typing as npt
@@ -18,7 +18,7 @@ else:
 if TYPE_CHECKING:
     import torch
 
-    from forecasters._validation import InputSpec
+    from forecasters._validation import NumpySpec, TorchSpec
 
 NativeLayout = tuple[Literal["batch", "variate", "horizon", "quantile"], ...]
 
@@ -105,36 +105,41 @@ def _all_finite(values: object) -> bool:
     return bool(xp.all(xp.isfinite(values)))
 
 
-def restore_output(
-    values: torch.Tensor, context_spec: InputSpec, *, model_name: str
-) -> npt.NDArray[np.number] | torch.Tensor:
-    """Validate selected values, then restore the caller's family, dtype and device."""
+def restore_numpy_output(
+    values: torch.Tensor, spec: NumpySpec, *, model_name: str
+) -> npt.NDArray[np.number]:
+    """Validate selected values, then restore the caller's NumPy dtype."""
     import torch
 
     if not _all_finite(values):
         raise RuntimeError(f"{model_name} native SDK returned non-finite selected forecast values")
 
-    restored: npt.NDArray[np.number] | torch.Tensor
-    if context_spec.family == "torch":
-        restored = values.detach().to(
-            device=context_spec.device,
-            dtype=cast("torch.dtype", context_spec.dtype),
-        )
-        destination = f"device {context_spec.device}"
-    else:
-        cpu_values = values.detach().to(device="cpu")
-        # NumPy has no bfloat16 dtype; widening to float32 preserves every value.
-        if cpu_values.dtype == torch.bfloat16:
-            cpu_values = cpu_values.float()
-        array = cpu_values.numpy()
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore", RuntimeWarning)
-            restored = array.astype(cast("np.dtype[Any]", context_spec.dtype), copy=False)
-        destination = f"NumPy dtype {context_spec.dtype}"
+    cpu_values = values.detach().to(device="cpu")
+    # NumPy has no bfloat16 dtype; widening to float32 preserves every value.
+    if cpu_values.dtype == torch.bfloat16:
+        cpu_values = cpu_values.float()
+    array = cpu_values.numpy()
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", RuntimeWarning)
+        restored = array.astype(spec.dtype, copy=False)
 
     if not _all_finite(restored):
         raise RuntimeError(
-            f"{model_name} forecast values are not representable in the requested {destination}; "
-            "conversion produced non-finite values"
+            f"{model_name} forecast values are not representable in the requested "
+            f"NumPy dtype {spec.dtype}; conversion produced non-finite values"
+        )
+    return restored
+
+
+def restore_torch_output(values: torch.Tensor, spec: TorchSpec, *, model_name: str) -> torch.Tensor:
+    """Validate selected values, then restore the caller's Torch dtype and device."""
+    if not _all_finite(values):
+        raise RuntimeError(f"{model_name} native SDK returned non-finite selected forecast values")
+
+    restored = values.detach().to(device=spec.device, dtype=spec.dtype)
+    if not _all_finite(restored):
+        raise RuntimeError(
+            f"{model_name} forecast values are not representable in the requested "
+            f"dtype {spec.dtype} on device {spec.device}; conversion produced non-finite values"
         )
     return restored
