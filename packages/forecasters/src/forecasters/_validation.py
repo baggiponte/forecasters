@@ -4,18 +4,27 @@ from __future__ import annotations
 
 import math
 import numbers
+import warnings
 from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Literal
 
-from array_api_compat import device, is_numpy_array, is_torch_array
+from array_api_compat import array_namespace, device, is_numpy_array, is_torch_array
+
+from forecasters._deps import import_torch
 
 if TYPE_CHECKING:
     import numpy as np
+    import numpy.typing as npt
     import torch
 
 # Match float32 encodings of grid levels without interpolating between probabilities.
 _NATIVE_LEVEL_ABS_TOL = 1e-7
+
+
+def _all_finite(values: object) -> bool:
+    xp = array_namespace(values)
+    return bool(xp.all(xp.isfinite(values)))
 
 
 @dataclass(frozen=True)
@@ -25,6 +34,29 @@ class NumpySpec:
     family: Literal["numpy"]
     dtype: np.dtype[Any]
 
+    def restore(self, values: torch.Tensor, *, model_name: str) -> npt.NDArray[np.number]:
+        """Validate selected values, then restore the caller's NumPy dtype."""
+        if not _all_finite(values):
+            raise RuntimeError(
+                f"{model_name} native SDK returned non-finite selected forecast values"
+            )
+
+        cpu_values = values.detach().to(device="cpu")
+        # NumPy has no bfloat16 dtype; widening to float32 preserves every value.
+        if cpu_values.dtype == import_torch().bfloat16:
+            cpu_values = cpu_values.float()
+        array = cpu_values.numpy()
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", RuntimeWarning)
+            restored = array.astype(self.dtype, copy=False)
+
+        if not _all_finite(restored):
+            raise RuntimeError(
+                f"{model_name} forecast values are not representable in the requested "
+                f"NumPy dtype {self.dtype}; conversion produced non-finite values"
+            )
+        return restored
+
 
 @dataclass(frozen=True)
 class TorchSpec:
@@ -33,6 +65,21 @@ class TorchSpec:
     family: Literal["torch"]
     dtype: torch.dtype
     device: torch.device | str
+
+    def restore(self, values: torch.Tensor, *, model_name: str) -> torch.Tensor:
+        """Validate selected values, then restore the caller's Torch dtype and device."""
+        if not _all_finite(values):
+            raise RuntimeError(
+                f"{model_name} native SDK returned non-finite selected forecast values"
+            )
+
+        restored = values.detach().to(device=self.device, dtype=self.dtype)
+        if not _all_finite(restored):
+            raise RuntimeError(
+                f"{model_name} forecast values are not representable in the requested "
+                f"dtype {self.dtype} on device {self.device}; conversion produced non-finite values"
+            )
+        return restored
 
 
 InputSpec = NumpySpec | TorchSpec

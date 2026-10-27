@@ -3,12 +3,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from forecasters._outputs import (
-    numpy_to_torch_safe,
-    require_native_tensor,
-    restore_numpy_output,
-    restore_torch_output,
-)
+from forecasters._outputs import numpy_to_torch_safe, require_native_tensor
 from forecasters._validation import NumpySpec, TorchSpec
 
 torch = pytest.importorskip("torch")
@@ -39,7 +34,7 @@ def test_extended_precision_context_is_narrowed_for_torch() -> None:
 @pytest.mark.parametrize("dtype", [np.float16, np.float32, np.float64, np.longdouble])
 def test_restores_numpy_dtype(dtype) -> None:
     spec = NumpySpec(family="numpy", dtype=np.dtype(dtype))
-    restored = restore_numpy_output(torch.tensor([1.5, 2.5]), spec, model_name="test/checkpoint")
+    restored = spec.restore(torch.tensor([1.5, 2.5]), model_name="test/checkpoint")
     assert restored.dtype == np.dtype(dtype)
     np.testing.assert_array_equal(restored, [1.5, 2.5])
 
@@ -47,7 +42,7 @@ def test_restores_numpy_dtype(dtype) -> None:
 @pytest.mark.parametrize("dtype", [torch.float64, torch.bfloat16])
 def test_restores_torch_dtype(dtype) -> None:
     spec = TorchSpec(family="torch", dtype=dtype, device=torch.device("cpu"))
-    restored = restore_torch_output(torch.tensor([1.5, 2.5]), spec, model_name="test/checkpoint")
+    restored = spec.restore(torch.tensor([1.5, 2.5]), model_name="test/checkpoint")
     torch.testing.assert_close(restored, torch.tensor([1.5, 2.5], dtype=dtype))
 
 
@@ -60,26 +55,26 @@ def test_restores_accelerator_device_when_available() -> None:
         pytest.skip("no accelerator available")
     context = torch.ones(1, device=device)
     spec = TorchSpec(family="torch", dtype=context.dtype, device=context.device)
-    restored = restore_torch_output(torch.tensor([1.0]), spec, model_name="test/checkpoint")
+    restored = spec.restore(torch.tensor([1.0]), model_name="test/checkpoint")
     torch.testing.assert_close(restored, context)
 
 
 def test_rejects_nonfinite_selected_values() -> None:
     spec = NumpySpec(family="numpy", dtype=np.dtype(np.float64))
     with pytest.raises(RuntimeError, match=r"test/checkpoint.*non-finite selected"):
-        restore_numpy_output(torch.tensor([torch.nan]), spec, model_name="test/checkpoint")
+        spec.restore(torch.tensor([torch.nan]), model_name="test/checkpoint")
 
 
 def test_rejects_overflow_in_numpy_dtype() -> None:
     spec = NumpySpec(family="numpy", dtype=np.dtype(np.float16))
     with pytest.raises(RuntimeError, match="not representable"):
-        restore_numpy_output(torch.tensor([70000.0]), spec, model_name="test/checkpoint")
+        spec.restore(torch.tensor([70000.0]), model_name="test/checkpoint")
 
 
 def test_rejects_overflow_in_torch_dtype() -> None:
     spec = TorchSpec(family="torch", dtype=torch.float16, device=torch.device("cpu"))
     with pytest.raises(RuntimeError, match="not representable"):
-        restore_torch_output(torch.tensor([70000.0]), spec, model_name="test/checkpoint")
+        spec.restore(torch.tensor([70000.0]), model_name="test/checkpoint")
 
 
 def test_native_output_must_be_a_tensor() -> None:
