@@ -28,7 +28,7 @@ def import_torch() -> ModuleType:
             "PyTorch is required for model inference. Install it directly with "
             "`pip install torch`, or install the Chronos-Bolt extra with "
             "`pip install 'forecasters[chronos]'`. Timestral is not published on PyPI; "
-            f"install its official SDK with `{_TIMESTRAL_INSTALL}`."
+            f"install its official SDK with `{_TIMESTRAL_INSTALL}`.",
         ) from exc
     return torch
 
@@ -41,7 +41,7 @@ def import_chronos_pipeline() -> Any:
             return import_torch()
         raise ImportError(
             "Chronos-Bolt inference requires the official `chronos-forecasting` package. "
-            + _install_hint("chronos")
+            + _install_hint("chronos"),
         ) from exc
     return ChronosBoltPipeline
 
@@ -55,6 +55,6 @@ def import_timestral_forecaster() -> Any:
         raise ImportError(
             "Timestral inference requires the official `timestral` package from "
             "https://github.com/mistralai/timestral. Timestral is not published on PyPI; "
-            f"install its official Git revision with `{_TIMESTRAL_INSTALL}`."
+            f"install its official Git revision with `{_TIMESTRAL_INSTALL}`.",
         ) from exc
     return TimestralForecaster

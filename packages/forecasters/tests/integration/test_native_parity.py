@@ -37,10 +37,14 @@ def load_chronos() -> tuple[Any, Any]:
     from forecasters import ChronosBolt
 
     adapter = ChronosBolt.from_pretrained(
-        "amazon/chronos-bolt-tiny", cache_dir=CACHE_DIR, local_files_only=True
+        "amazon/chronos-bolt-tiny",
+        cache_dir=CACHE_DIR,
+        local_files_only=True,
     )
     native = ChronosBoltPipeline.from_pretrained(
-        "amazon/chronos-bolt-tiny", cache_dir=str(CACHE_DIR), local_files_only=True
+        "amazon/chronos-bolt-tiny",
+        cache_dir=str(CACHE_DIR),
+        local_files_only=True,
     )
     return adapter, native
 
@@ -51,10 +55,14 @@ def load_timestral() -> tuple[Any, Any]:
     from forecasters import Timestral
 
     adapter = Timestral.from_pretrained(
-        "mistralai/Timestral-5M", cache_dir=CACHE_DIR, local_files_only=True
+        "mistralai/Timestral-5M",
+        cache_dir=CACHE_DIR,
+        local_files_only=True,
     )
     native = TimestralForecaster.from_pretrained(
-        "mistralai/Timestral-5M", cache_dir=str(CACHE_DIR), local_files_only=True
+        "mistralai/Timestral-5M",
+        cache_dir=str(CACHE_DIR),
+        local_files_only=True,
     )
     return adapter, native
 
@@ -84,7 +92,9 @@ LOADERS: list[
 
 
 @pytest.mark.parametrize(
-    ("name", "loader", "raw_forecast"), LOADERS, ids=[item[0] for item in LOADERS]
+    ("name", "loader", "raw_forecast"),
+    LOADERS,
+    ids=[item[0] for item in LOADERS],
 )
 def test_median_and_requested_quantiles_match_native_sdk(
     name: str,

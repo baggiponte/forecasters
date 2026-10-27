@@ -15,6 +15,9 @@ def test_import_forecasters_is_lazy() -> None:
         "assert not loaded, loaded"
     )
     completed = subprocess.run(
-        [sys.executable, "-c", code], capture_output=True, text=True, check=False
+        [sys.executable, "-c", code],
+        capture_output=True,
+        text=True,
+        check=False,
     )
     assert completed.returncode == 0, completed.stderr
