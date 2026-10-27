@@ -61,10 +61,10 @@ class Forecaster(Protocol):
 
     def predict(
         self,
-        context: npt.NDArray[np.generic] | torch.Tensor,
+        context: npt.NDArray[np.number] | torch.Tensor,
         *,
         horizon: int,
         quantile_levels: Sequence[float] | None = None,
-    ) -> npt.NDArray[np.generic] | torch.Tensor:
+    ) -> npt.NDArray[np.number] | torch.Tensor:
         """Forecast ``horizon`` steps after a one-dimensional floating context."""
         ...

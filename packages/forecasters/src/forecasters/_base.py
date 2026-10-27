@@ -92,11 +92,11 @@ class BaseForecaster(ABC):
     @final
     def predict(
         self,
-        context: npt.NDArray[np.generic] | torch.Tensor,
+        context: npt.NDArray[np.number] | torch.Tensor,
         *,
         horizon: int,
         quantile_levels: Sequence[float] | None = None,
-    ) -> npt.NDArray[np.generic] | torch.Tensor:
+    ) -> npt.NDArray[np.number] | torch.Tensor:
         """Return the native median (H,) or requested quantiles (H, Q).
 
         Preserve the caller's array family, floating dtype and Torch device.

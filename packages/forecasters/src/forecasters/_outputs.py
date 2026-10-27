@@ -41,7 +41,7 @@ def validate_native_layout(layout: NativeLayout) -> NativeLayout:
     return tuple(layout)
 
 
-def numpy_to_torch_safe(context: npt.NDArray[np.generic]) -> npt.NDArray[np.generic]:
+def numpy_to_torch_safe(context: npt.NDArray[np.number]) -> npt.NDArray[np.number]:
     """Make a NumPy context safe for the SDK's Torch bridge without mutating the caller."""
     array = np.ascontiguousarray(context)
     if not array.flags.writeable:
@@ -58,7 +58,7 @@ def numpy_to_torch_safe(context: npt.NDArray[np.generic]) -> npt.NDArray[np.gene
 
 
 def to_torch_context(
-    context: npt.NDArray[np.generic] | torch.Tensor, *, dtype: torch.dtype | None
+    context: npt.NDArray[np.number] | torch.Tensor, *, dtype: torch.dtype | None
 ) -> torch.Tensor:
     """Bridge a validated context to Torch using the SDK's requested compute dtype."""
     import torch
@@ -107,14 +107,14 @@ def _all_finite(values: object) -> bool:
 
 def restore_output(
     values: torch.Tensor, context_spec: InputSpec, *, model_name: str
-) -> npt.NDArray[np.generic] | torch.Tensor:
+) -> npt.NDArray[np.number] | torch.Tensor:
     """Validate selected values, then restore the caller's family, dtype and device."""
     import torch
 
     if not _all_finite(values):
         raise RuntimeError(f"{model_name} native SDK returned non-finite selected forecast values")
 
-    restored: npt.NDArray[np.generic] | torch.Tensor
+    restored: npt.NDArray[np.number] | torch.Tensor
     if context_spec.family == "torch":
         restored = values.detach().to(
             device=context_spec.device,
