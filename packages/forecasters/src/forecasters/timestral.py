@@ -2,10 +2,16 @@
 
 from __future__ import annotations
 
+import sys
 from typing import TYPE_CHECKING, Any, final
 
 from forecasters._base import BaseForecaster
 from forecasters._deps import import_timestral_forecaster
+
+if sys.version_info >= (3, 12):
+    from typing import override
+else:
+    from typing_extensions import override
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -50,6 +56,7 @@ class Timestral(BaseForecaster):
         )
         return cls(native, model_name=model_name)
 
+    @override
     def _predict_native(self, context: torch.Tensor, *, horizon: int) -> object:
         forecast = self._forecaster.forecast(context, prediction_length=horizon)
         return forecast.quantiles
