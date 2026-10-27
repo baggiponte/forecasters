@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, final
 
 from forecasters._base import BaseForecaster
 from forecasters._deps import import_chronos_pipeline
@@ -15,6 +15,7 @@ if TYPE_CHECKING:
 _DEFAULT_CHECKPOINT = "amazon/chronos-bolt-tiny"
 
 
+@final
 class ChronosBolt(BaseForecaster):
     """A loaded Chronos-Bolt checkpoint."""
 
