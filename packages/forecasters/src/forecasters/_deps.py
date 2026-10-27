@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
-from types import ModuleType
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from types import ModuleType
 
 _TIMESTRAL_INSTALL = (
     "pip install 'timestral @ git+https://github.com/mistralai/timestral.git"

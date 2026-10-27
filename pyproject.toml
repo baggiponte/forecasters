@@ -29,7 +29,7 @@ native = [
 
 [tool.pytest.ini_options]
 testpaths = ["packages/forecasters/tests"]
-addopts = "-q"
+addopts = "-q --strict-markers"
 markers = [
   "native: requires downloaded native SDK checkpoints",
   "backend: requires the optional PyTorch test backend",
@@ -41,7 +41,7 @@ target-version = "py311"
 line-length = 100
 
 [tool.ruff.lint]
-extend-select = ["I"]
+extend-select = ["I", "UP", "B", "PYI", "TC", "RUF"]
 
 [tool.mdformat]
 wrap = "no"

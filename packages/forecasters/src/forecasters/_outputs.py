@@ -9,10 +9,11 @@ import numpy as np
 from array_api_compat import array_namespace, is_torch_array
 
 from forecasters._deps import import_torch
-from forecasters._validation import InputSpec
 
 if TYPE_CHECKING:
     import torch
+
+    from forecasters._validation import InputSpec
 
 NativeLayout = tuple[Literal["batch", "variate", "horizon", "quantile"], ...]
 
@@ -52,7 +53,7 @@ def to_native_context(
 ) -> torch.Tensor:
     """Bridge a validated context to Torch using the SDK's requested compute dtype."""
     values = (
-        numpy_native_context(cast(np.ndarray, context))
+        numpy_native_context(cast("np.ndarray", context))
         if context_spec.family == "numpy"
         else context
     )

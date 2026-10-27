@@ -2,14 +2,15 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
 from typing import TYPE_CHECKING, Any, Protocol, TypeVar, overload
 
 import numpy as np
-from numpy.typing import NDArray
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
+
     import torch
+    from numpy.typing import NDArray
 
 _FloatDType = TypeVar("_FloatDType", bound=np.floating[Any])
 

@@ -1,13 +1,16 @@
 from __future__ import annotations
 
-from pathlib import Path
 from types import SimpleNamespace
+from typing import TYPE_CHECKING
 from unittest.mock import Mock
 
 import numpy as np
 import pytest
 
 from forecasters import ChronosBolt, Timestral
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 torch = pytest.importorskip("torch")
 pytestmark = pytest.mark.backend
@@ -87,7 +90,7 @@ def test_rejects_malformed_native_shape(adapter, native, failure: str) -> None:
     else:
         shape = (1, 1, 3, 3) if failure == "oversized-horizon" else (1, 2, 3)
     native.output = torch.ones(shape)
-    with pytest.raises(RuntimeError, match="test/checkpoint.*expected exactly"):
+    with pytest.raises(RuntimeError, match=r"test/checkpoint.*expected exactly"):
         adapter.predict(np.ones(3, dtype=np.float32), horizon=2)
 
 
