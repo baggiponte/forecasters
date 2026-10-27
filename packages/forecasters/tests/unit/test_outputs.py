@@ -3,7 +3,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from forecasters._outputs import numpy_native_context, require_native_tensor, restore_output
+from forecasters._outputs import numpy_to_torch_safe, require_native_tensor, restore_output
 from forecasters._validation import InputSpec
 
 torch = pytest.importorskip("torch")
@@ -12,21 +12,21 @@ pytestmark = pytest.mark.backend
 
 def test_negative_stride_context_can_cross_the_torch_bridge() -> None:
     context = np.array([1.0, 2.0, 3.0])[::-1]
-    native = torch.as_tensor(numpy_native_context(context))
+    native = torch.as_tensor(numpy_to_torch_safe(context))
     torch.testing.assert_close(native, torch.tensor([3.0, 2.0, 1.0], dtype=torch.float64))
 
 
 def test_readonly_context_gets_a_writable_copy() -> None:
     context = np.ones(3)
     context.setflags(write=False)
-    native = numpy_native_context(context)
+    native = numpy_to_torch_safe(context)
     assert native.flags.writeable
     assert not np.shares_memory(native, context)
 
 
 @pytest.mark.skipif(np.dtype(np.longdouble).itemsize <= 8, reason="longdouble is float64 here")
 def test_extended_precision_context_is_narrowed_for_torch() -> None:
-    native = numpy_native_context(np.array([1.0, 2.0], dtype=np.longdouble))
+    native = numpy_to_torch_safe(np.array([1.0, 2.0], dtype=np.longdouble))
     assert native.dtype == np.float64
     np.testing.assert_array_equal(native, [1.0, 2.0])
 

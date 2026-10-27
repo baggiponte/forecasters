@@ -8,10 +8,10 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Literal, cast
 
-import numpy as np
-from array_api_compat import array_namespace, device, is_numpy_array, is_torch_array
+from array_api_compat import device, is_numpy_array, is_torch_array
 
 if TYPE_CHECKING:
+    import numpy as np
     import torch
 
 # Match float32 encodings of grid levels without interpolating between probabilities.
@@ -34,33 +34,18 @@ def validate_context(context: object) -> InputSpec:
             raise ValueError(f"context must be one-dimensional; got shape {tuple(array.shape)}")
         if array.shape[0] == 0:
             raise ValueError("context must contain at least one observation")
-        if not np.issubdtype(array.dtype, np.floating):
-            raise TypeError(
-                "context arrays must have a floating dtype; "
-                f"got {array.dtype}. Convert the values to float explicitly before calling predict."
-            )
-        if not np.isfinite(array).all():
-            raise ValueError("context must contain only finite values")
         return InputSpec(family="numpy", dtype=array.dtype, device=None)
 
     if is_torch_array(context):
         tensor = cast("torch.Tensor", context)
-        xp = array_namespace(tensor)
         if tensor.ndim != 1:
             raise ValueError(f"context must be one-dimensional; got shape {tuple(tensor.shape)}")
         if tensor.shape[0] == 0:
             raise ValueError("context must contain at least one observation")
-        if not bool(xp.isdtype(tensor.dtype, "real floating")):
-            raise TypeError(
-                "context tensors must have a floating dtype; "
-                f"got {tensor.dtype}. Convert the values to float explicitly before calling predict."
-            )
-        if not bool(xp.all(xp.isfinite(tensor))):
-            raise ValueError("context must contain only finite values")
         return InputSpec(family="torch", dtype=tensor.dtype, device=device(tensor))
 
     raise TypeError(
-        "context must be a NumPy ndarray or PyTorch Tensor with a floating dtype; "
+        "context must be a NumPy ndarray or PyTorch Tensor; "
         f"got {type(context).__name__}. Python sequences and other array libraries are "
         "not accepted as context (only quantile_levels may be a sequence)."
     )

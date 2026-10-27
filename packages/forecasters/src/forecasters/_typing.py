@@ -1,0 +1,9 @@
+"""Private type variables shared by the public prediction overloads."""
+
+from typing import TypeVar
+
+import numpy as np
+
+# Numeric NumPy scalars only: excludes bool_, str_, bytes_, object_, datetime64 and void.
+# timedelta64 subclasses signedinteger, so it is still accepted; the SDK rejects it at runtime.
+DTypeT = TypeVar("DTypeT", bound=np.number)
