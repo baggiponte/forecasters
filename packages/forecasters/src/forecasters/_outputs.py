@@ -3,12 +3,11 @@
 from __future__ import annotations
 
 import sys
-import warnings
-from typing import TYPE_CHECKING, Any, Literal, cast
+from typing import TYPE_CHECKING, Literal
 
 import numpy as np
 import numpy.typing as npt
-from array_api_compat import array_namespace, is_torch_array
+from array_api_compat import is_torch_array
 
 if sys.version_info >= (3, 13):
     from typing import TypeIs
@@ -17,8 +16,6 @@ else:
 
 if TYPE_CHECKING:
     import torch
-
-    from forecasters._validation import InputSpec
 
 NativeLayout = tuple[Literal["batch", "variate", "horizon", "quantile"], ...]
 
@@ -98,43 +95,3 @@ def normalize_native_quantiles(
         .movedim((layout.index("horizon"), layout.index("quantile")), (0, 1))
         .reshape(horizon, quantile_count)
     )
-
-
-def _all_finite(values: object) -> bool:
-    xp = array_namespace(values)
-    return bool(xp.all(xp.isfinite(values)))
-
-
-def restore_output(
-    values: torch.Tensor, context_spec: InputSpec, *, model_name: str
-) -> npt.NDArray[np.number] | torch.Tensor:
-    """Validate selected values, then restore the caller's family, dtype and device."""
-    import torch
-
-    if not _all_finite(values):
-        raise RuntimeError(f"{model_name} native SDK returned non-finite selected forecast values")
-
-    restored: npt.NDArray[np.number] | torch.Tensor
-    if context_spec.family == "torch":
-        restored = values.detach().to(
-            device=context_spec.device,
-            dtype=cast("torch.dtype", context_spec.dtype),
-        )
-        destination = f"device {context_spec.device}"
-    else:
-        cpu_values = values.detach().to(device="cpu")
-        # NumPy has no bfloat16 dtype; widening to float32 preserves every value.
-        if cpu_values.dtype == torch.bfloat16:
-            cpu_values = cpu_values.float()
-        array = cpu_values.numpy()
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore", RuntimeWarning)
-            restored = array.astype(cast("np.dtype[Any]", context_spec.dtype), copy=False)
-        destination = f"NumPy dtype {context_spec.dtype}"
-
-    if not _all_finite(restored):
-        raise RuntimeError(
-            f"{model_name} forecast values are not representable in the requested {destination}; "
-            "conversion produced non-finite values"
-        )
-    return restored

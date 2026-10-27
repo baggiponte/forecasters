@@ -52,4 +52,4 @@ class Timestral(BaseForecaster):
 
     def _predict_native(self, context: torch.Tensor, *, horizon: int) -> object:
         forecast = self._forecaster.forecast(context, prediction_length=horizon)
-        return getattr(forecast, "quantiles", None)
+        return forecast.quantiles

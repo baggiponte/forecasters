@@ -9,7 +9,6 @@ from forecasters._outputs import (
     NativeLayout,
     normalize_native_quantiles,
     require_native_tensor,
-    restore_output,
     to_torch_context,
     validate_native_layout,
 )
@@ -130,7 +129,7 @@ class BaseForecaster(ABC):
             model_name=self._model_name,
         )
         selected = quantiles[:, self._median_index] if indices is None else quantiles[:, indices]
-        return restore_output(selected, context_spec, model_name=self._model_name)
+        return context_spec.restore(selected, model_name=self._model_name)
 
     @abstractmethod
     def _predict_native(self, context: torch.Tensor, *, horizon: int) -> object:
