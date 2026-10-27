@@ -33,7 +33,7 @@ def validate_native_layout(layout: NativeLayout) -> NativeLayout:
     ):
         raise ValueError(
             "native_layout must contain one 'horizon' and one 'quantile' axis, "
-            "with optional unique 'batch' and 'variate' axes"
+            "with optional unique 'batch' and 'variate' axes",
         )
     return tuple(layout)
 
@@ -48,14 +48,16 @@ def numpy_to_torch_safe(context: npt.NDArray[np.number]) -> npt.NDArray[np.numbe
         if not np.isfinite(converted).all():
             raise ValueError(
                 "NumPy longdouble context cannot be represented in float64 for native "
-                "inference without overflow"
+                "inference without overflow",
             )
         array = converted
     return array
 
 
 def to_torch_context(
-    context: npt.NDArray[np.number] | torch.Tensor, *, dtype: torch.dtype | None
+    context: npt.NDArray[np.number] | torch.Tensor,
+    *,
+    dtype: torch.dtype | None,
 ) -> torch.Tensor:
     """Bridge a validated context to Torch using the SDK's requested compute dtype."""
     import torch
@@ -68,7 +70,7 @@ def to_torch_context(
 def require_native_tensor(values: object, *, model_name: str) -> torch.Tensor:
     if not _is_tensor(values):
         raise RuntimeError(
-            f"{model_name} native SDK returned {type(values).__name__}; expected a torch.Tensor"
+            f"{model_name} native SDK returned {type(values).__name__}; expected a torch.Tensor",
         )
     return values
 
@@ -87,7 +89,7 @@ def normalize_native_quantiles(
     if tuple(tensor.shape) != expected_shape:
         raise RuntimeError(
             f"{model_name} native SDK returned shape {tuple(tensor.shape)}; "
-            f"expected exactly {expected_shape}"
+            f"expected exactly {expected_shape}",
         )
     # All other axes have already been checked to be singleton dimensions.
     return (

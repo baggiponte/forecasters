@@ -107,19 +107,22 @@ class BaseForecaster(ABC):
         if context.shape[-1] > self.max_context_length:
             raise ValueError(
                 f"context length {context.shape[-1]} exceeds {self._model_name}'s supported "
-                f"maximum of {self.max_context_length}"
+                f"maximum of {self.max_context_length}",
             )
         if horizon > self.max_horizon:
             raise ValueError(
-                f"horizon {horizon} exceeds {self._model_name}'s native maximum of {self.max_horizon}"
+                f"horizon {horizon} exceeds {self._model_name}'s native maximum of {self.max_horizon}",
             )
         indices = validate_quantile_levels(
-            quantile_levels, self.supported_quantile_levels, model_name=self._model_name
+            quantile_levels,
+            self.supported_quantile_levels,
+            model_name=self._model_name,
         )
 
         native_context = to_torch_context(context, dtype=self._native_dtype)
         raw = require_native_tensor(
-            self._predict_native(native_context, horizon=horizon), model_name=self._model_name
+            self._predict_native(native_context, horizon=horizon),
+            model_name=self._model_name,
         )
         quantiles = normalize_native_quantiles(
             raw,

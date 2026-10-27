@@ -61,7 +61,9 @@ def check_adapter_typing(
 
 
 def check_extension_typing(
-    model: CustomForecaster, np64: NDArray[np.float64], tensor: torch.Tensor
+    model: CustomForecaster,
+    np64: NDArray[np.float64],
+    tensor: torch.Tensor,
 ) -> None:
     forecaster: Forecaster = model
     check_forecaster(forecaster)

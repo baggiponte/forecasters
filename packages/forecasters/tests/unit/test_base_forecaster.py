@@ -40,7 +40,7 @@ class ExampleForecaster(BaseForecaster):
 @pytest.mark.parametrize("family", ["numpy", "torch"])
 def test_new_adapter_inherits_selection_and_representation(layout: str, family: str) -> None:
     values = torch.tensor(
-        [[1.0, 11.0, 101.0], [2.0, 12.0, 102.0], [3.0, 13.0, 103.0], [4.0, 14.0, 104.0]]
+        [[1.0, 11.0, 101.0], [2.0, 12.0, 102.0], [3.0, 13.0, 103.0], [4.0, 14.0, 104.0]],
     )
     if layout == "canonical":
         native = Mock(side_effect=lambda context, *, horizon: values[:horizon])
@@ -83,7 +83,9 @@ def test_new_adapter_inherits_selection_and_representation(layout: str, family: 
 )
 def test_single_horizon_and_single_quantile_keep_public_shapes(layout, levels, output, expected):
     model = ExampleForecaster(
-        Mock(return_value=output), native_layout=layout, quantile_levels=levels
+        Mock(return_value=output),
+        native_layout=layout,
+        quantile_levels=levels,
     )
     context = np.ones(2, dtype=np.float32)
     median = model.predict(context, horizon=1)
@@ -130,7 +132,8 @@ def test_declared_singleton_axes_must_really_be_singletons() -> None:
 
 
 @pytest.mark.parametrize(
-    "layout", [("horizon",), ("horizon", "quantile", "quantile"), ("horizon", "quantile", "typo")]
+    "layout",
+    [("horizon",), ("horizon", "quantile", "quantile"), ("horizon", "quantile", "typo")],
 )
 def test_invalid_layout_is_an_authoring_error(layout) -> None:
     with pytest.raises(ValueError, match="native_layout"):

@@ -45,7 +45,9 @@ def test_invalid_horizons(horizon: Any) -> None:
 
 def test_quantile_matching_preserves_order_and_float32_representation() -> None:
     indices = validate_quantile_levels(
-        [0.9, float(np.float32(0.1)), 0.5], SUPPORTED, model_name="fake"
+        [0.9, float(np.float32(0.1)), 0.5],
+        SUPPORTED,
+        model_name="fake",
     )
     assert indices == [8, 0, 4]
 

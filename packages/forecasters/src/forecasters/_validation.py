@@ -38,7 +38,7 @@ class NumpySpec:
         """Validate selected values, then restore the caller's NumPy dtype."""
         if not _all_finite(values):
             raise RuntimeError(
-                f"{model_name} native SDK returned non-finite selected forecast values"
+                f"{model_name} native SDK returned non-finite selected forecast values",
             )
 
         cpu_values = values.detach().to(device="cpu")
@@ -53,7 +53,7 @@ class NumpySpec:
         if not _all_finite(restored):
             raise RuntimeError(
                 f"{model_name} forecast values are not representable in the requested "
-                f"NumPy dtype {self.dtype}; conversion produced non-finite values"
+                f"NumPy dtype {self.dtype}; conversion produced non-finite values",
             )
         return restored
 
@@ -70,14 +70,14 @@ class TorchSpec:
         """Validate selected values, then restore the caller's Torch dtype and device."""
         if not _all_finite(values):
             raise RuntimeError(
-                f"{model_name} native SDK returned non-finite selected forecast values"
+                f"{model_name} native SDK returned non-finite selected forecast values",
             )
 
         restored = values.detach().to(device=self.device, dtype=self.dtype)
         if not _all_finite(restored):
             raise RuntimeError(
                 f"{model_name} forecast values are not representable in the requested "
-                f"dtype {self.dtype} on device {self.device}; conversion produced non-finite values"
+                f"dtype {self.dtype} on device {self.device}; conversion produced non-finite values",
             )
         return restored
 
@@ -105,7 +105,7 @@ def validate_context(context: object) -> InputSpec:
     raise TypeError(
         "context must be a NumPy ndarray or PyTorch Tensor; "
         f"got {type(context).__name__}. Python sequences and other array libraries are "
-        "not accepted as context (only quantile_levels may be a sequence)."
+        "not accepted as context (only quantile_levels may be a sequence).",
     )
 
 
@@ -129,7 +129,7 @@ def median_index(supported: tuple[float, ...], *, model_name: str) -> int:
     index = _find_native_level(0.5, supported)
     if index is None:
         raise RuntimeError(
-            f"{model_name} does not expose a native 0.5 quantile; supported levels are {supported!r}"
+            f"{model_name} does not expose a native 0.5 quantile; supported levels are {supported!r}",
         )
     return index
 
@@ -151,14 +151,14 @@ def validate_quantile_levels(
     if isinstance(levels, (str, bytes)) or not isinstance(levels, Sequence):
         raise TypeError(
             "quantile_levels must be a nonempty sequence of probabilities between 0 and 1; "
-            f"got {type(levels).__name__}"
+            f"got {type(levels).__name__}",
         )
 
     requested: list[float] = []
     for item in levels:
         if isinstance(item, bool) or not isinstance(item, numbers.Real):
             raise TypeError(
-                f"quantile levels must be real numbers, not {type(item).__name__}: {item!r}"
+                f"quantile levels must be real numbers, not {type(item).__name__}: {item!r}",
             )
         value = float(item)
         if not math.isfinite(value):
@@ -182,13 +182,13 @@ def validate_quantile_levels(
     if unavailable:
         raise ValueError(
             f"{model_name} does not support the requested quantile levels {unavailable!r}; "
-            f"supported native levels are {supported!r}"
+            f"supported native levels are {supported!r}",
         )
 
     if len(set(indices)) != len(indices):
         raise ValueError(
             "quantile_levels must be unique after matching the loaded checkpoint's native levels; "
-            f"got {requested!r} for native levels {supported!r}"
+            f"got {requested!r} for native levels {supported!r}",
         )
 
     return indices

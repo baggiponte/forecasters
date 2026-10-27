@@ -36,7 +36,7 @@ class TimestralSDK:
     def __init__(self) -> None:
         self.output = torch.tensor([[[[1.0, 10.0, 100.0], [2.0, 20.0, 200.0], [3.0, 30.0, 300.0]]]])
         self.forecast = Mock(
-            side_effect=lambda *args, **kwargs: SimpleNamespace(quantiles=self.output)
+            side_effect=lambda *args, **kwargs: SimpleNamespace(quantiles=self.output),
         )
 
 
@@ -71,7 +71,8 @@ def test_selects_native_median_and_requested_columns(adapter, native, family: st
         torch.testing.assert_close(median, torch.tensor([10.0, 20.0, 30.0], dtype=torch.float64))
         torch.testing.assert_close(quantiles, torch.tensor(expected, dtype=torch.float64))
         torch.testing.assert_close(
-            singleton, torch.tensor([[10.0], [20.0], [30.0]], dtype=torch.float64)
+            singleton,
+            torch.tensor([[10.0], [20.0], [30.0]], dtype=torch.float64),
         )
 
     call = native.predict.call_args if isinstance(native, ChronosSDK) else native.forecast.call_args
@@ -128,14 +129,18 @@ def test_checkpoint_metadata_controls_request_limits(adapter, native) -> None:
 
 
 def test_from_pretrained_routes_loader_arguments(
-    adapter, native, monkeypatch, tmp_path: Path
+    adapter,
+    native,
+    monkeypatch,
+    tmp_path: Path,
 ) -> None:
     chronos = isinstance(native, ChronosSDK)
     module = "chronos_bolt" if chronos else "timestral"
     importer = "import_chronos_pipeline" if chronos else "import_timestral_forecaster"
     load = Mock(return_value=native)
     monkeypatch.setattr(
-        f"forecasters.{module}.{importer}", lambda: SimpleNamespace(from_pretrained=load)
+        f"forecasters.{module}.{importer}",
+        lambda: SimpleNamespace(from_pretrained=load),
     )
     type(adapter).from_pretrained(
         "custom/checkpoint",
