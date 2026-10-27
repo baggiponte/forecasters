@@ -6,7 +6,7 @@ import math
 import numbers
 from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Literal, cast
+from typing import TYPE_CHECKING, Any, Literal
 
 from array_api_compat import device, is_numpy_array, is_torch_array
 
@@ -37,7 +37,7 @@ def validate_context(context: object) -> InputSpec:
         return InputSpec(family="numpy", dtype=array.dtype, device=None)
 
     if is_torch_array(context):
-        tensor = cast("torch.Tensor", context)
+        tensor = context
         if tensor.ndim != 1:
             raise ValueError(f"context must be one-dimensional; got shape {tuple(tensor.shape)}")
         if tensor.shape[0] == 0:
